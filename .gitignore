@@ -1,3 +1,5 @@
 .idea/
-data/*[0-9]*/
+data/training/
+data/testing/
+*.avi
 

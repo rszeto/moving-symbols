@@ -41,13 +41,15 @@ def mnist_read(dataset = "training", path = "."):
 
 
 def main():
+    splits = ['training', 'testing']
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    digit_counts = np.zeros(10)
 
-    for split in ['training', 'testing']:
+    for split in splits:
+        digit_counts = np.zeros(10)
+        split_dir = os.path.join(script_dir, split)
         mnist_iter = mnist_read(split)
         for label, image in mnist_iter:
-            digit_dir = os.path.join(script_dir, str(label))
+            digit_dir = os.path.join(split_dir, str(label))
             if not os.path.isdir(digit_dir):
                 os.makedirs(digit_dir)
             imsave(os.path.join(digit_dir, '%04d.png' % digit_counts[label]), image)
