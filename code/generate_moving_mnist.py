@@ -9,7 +9,7 @@ from time import time
 
 def tight_crop(image):
     '''
-    Produce a tight crop around the given image
+    Tightly crop around the non-zero values of the given image
     :param image: w x h x <2 or 3> image matrix
     :return:
     '''
@@ -32,23 +32,6 @@ def tight_crop(image):
         crop = image[y:y + h, x:x + w, :]
 
     return crop
-
-def get_random_image(split):
-    '''
-    Get a random image and label from the given split
-    :param split: The name of the split, either 'training' or 'testing'
-    :return:
-    '''
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.abspath(os.path.join(script_dir, '..', 'data'))
-    label = np.random.randint(10)
-    digit_dir = os.path.join(data_dir, split, str(label))
-    image = imread(os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir)))))
-    # image = imread('/home/szetor/Pictures/profile.jpg')
-    # image = imread(os.path.join(data_dir, split, '0', '0000.png'))
-    crop = tight_crop(image)
-
-    return crop, label
 
 
 def get_rotated_scaled_image_tight_crop(image, deg, scale):
@@ -146,178 +129,276 @@ def overlay_image(fg, bg):
     return np.minimum(255, fg.astype(np.int) + bg.astype(np.int)).astype(np.uint8)
 
 
-def sample_start_params(limit_params):
+def save_tensor_as_mjpg(filename, video_tensor):
     '''
-    Choose starting parameters from the limit params
-    :param limit_params: A dict with the following fields:
-        x_lim (list)
-        y_lim (list)
-        scale_lim (list)
+    Saves the given video tensor as a video
+    :param filename: The location of the video
+    :param video_tensor: The H x W (x C) x T tensor of frames
     :return:
     '''
-    MAX_IMAGE_SIZE = 28.0
-    scale_start = np.random.uniform(limit_params['scale_lim'][0], limit_params['scale_lim'][1])
-    angle_start = np.random.randint(360)
-    # Start far from the video frame border to avoid image clipping
-    pad = (MAX_IMAGE_SIZE / 2) * np.sqrt(2) * scale_start
-    x_start = np.random.randint(np.ceil(limit_params['x_lim'][0] + pad), np.floor(limit_params['x_lim'][1] - pad))
-    y_start = np.random.randint(np.ceil(limit_params['y_lim'][0] + pad), np.floor(limit_params['y_lim'][1] - pad))
-    
-    return dict(
-        scale=scale_start,
-        x=x_start,
-        y=y_start,
-        angle=angle_start
-    )
+    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+    out = cv2.VideoWriter('output.avi', fourcc, 15.0, tuple(video_tensor.shape[:2]))
+    for i in range(video_tensor.shape[-1]):
+        if video_tensor.ndim == 3:
+            video_frame = cv2.cvtColor(video_tensor[:, :, i], cv2.COLOR_GRAY2BGR)
+        else:
+            video_frame = video_tensor[:, :, :, i]
+        out.write(video_frame[:, :, ::-1])
+    out.release()
 
 
-def sample_update_params(update_limit_params):
-    '''
-    Choose update parameters from the limit params
-    :param update_limit_params: A dict with the following fields:
-        x_speed_lim (list)
-        y_speed_lim (list)
-        scale_speed_lim (list)
-        angle_speed_lim (list)
-    :return: 
-    '''
-    scale_speed = np.random.uniform(update_limit_params['scale_speed_lim'][0], 
-                                    update_limit_params['scale_speed_lim'][1])
-    x_speed = np.random.uniform(update_limit_params['x_speed_lim'][0],
-                                update_limit_params['x_speed_lim'][1])
-    y_speed = np.random.uniform(update_limit_params['y_speed_lim'][0],
-                                update_limit_params['y_speed_lim'][1])
-    if update_limit_params['angle_speed_lim'][0] == update_limit_params['angle_speed_lim'][1]:
-        angle_speed = update_limit_params['angle_speed_lim'][0]
-    else:
-        angle_speed = np.random.randint(update_limit_params['angle_speed_lim'][0],
-                                        update_limit_params['angle_speed_lim'][1])
-    
-    return dict(
-        scale_speed=scale_speed,
-        x_speed=x_speed,
-        y_speed=y_speed,
-        angle_speed=angle_speed
-    )
+class MovingMNISTGenerator:
+
+    __SCRIPT_DIR__ = os.path.dirname(os.path.abspath(__file__))
+
+    def __init__(self,
+                 data_dir=os.path.abspath(os.path.join(__SCRIPT_DIR__, '..', 'data')), split='training',
+                 num_images=1, max_image_size=28, video_size=(64, 64), num_timesteps=30,
+                 binary_output=False,
+                 angle_lim=[0, 0], scale_lim=[1, 1],
+                 x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0]):
+        self.data_dir = data_dir
+        self.split = split
+        self.num_images = num_images
+        self.max_image_size = max_image_size
+        self.video_size = video_size
+        self.num_timesteps = num_timesteps
+        self.binary_output = binary_output
+        self.angle_lim = [x % 360 for x in angle_lim]
+        self.scale_lim = scale_lim
+        self.x_speed_lim = x_speed_lim
+        self.y_speed_lim = y_speed_lim
+        self.scale_speed_lim = scale_speed_lim
+        self.angle_speed_lim = angle_speed_lim
+
+        self.x_lim = [0, video_size[0]]
+        self.y_lim = [0, video_size[1]]
+
+        # Get digits and split them into image and label lists
+        digit_infos = [self.__get_digit__() for _ in range(num_images)]
+        self.images, self.labels = zip(*digit_infos)
+
+        # Set image channel count
+        self.is_src_grayscale = (self.images[0].ndim == 2)
+
+        # Sample starting states and update params
+        self.states = [self.__sample_start_states__() for _ in range(num_images)]
+        self.update_params = [self.__sample_update_params__() for _ in range(num_images)]
+
+
+    def __get_digit__(self):
+        '''
+        Get random digit images (cropped) and labels
+        :return:
+        '''
+        label = np.random.randint(10)
+        digit_dir = os.path.join(self.data_dir, self.split, str(label))
+        image = imread(os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir)))))
+        # image = np.stack([image, np.zeros(image.shape), np.zeros(image.shape)], axis=-1).astype(np.uint8)
+        crop = tight_crop(image)
+        return crop, label
+
+
+    def __sample_start_states__(self):
+        '''
+        Choose starting parameters based on possible position, scale, etc.
+        :return:
+        '''
+        scale_start = np.random.uniform(self.scale_lim[0], self.scale_lim[1])
+        # if self.angle_lim[0] == self.angle_lim[1]:
+        #     angle_start = self.angle_lim[0]
+        # else:
+        #     angle_start = np.random.randint(self.angle_lim[0], self.angle_lim[1])
+        angle_start = 0
+        # Start far from the video frame border to avoid image clipping
+        pad = (self.max_image_size / 2) * np.sqrt(2) * scale_start
+        x_start = np.random.randint(np.ceil(self.x_lim[0] + pad), np.floor(self.x_lim[1] - pad))
+        y_start = np.random.randint(np.ceil(self.y_lim[0] + pad), np.floor(self.y_lim[1] - pad))
+
+        return dict(
+            scale=scale_start,
+            x=x_start,
+            y=y_start,
+            angle=angle_start
+        )
+
+
+    def __sample_update_params__(self):
+        '''
+        Choose update parameters based on possible position, scale updates, etc.
+        :return:
+        '''
+        scale_speed = np.random.uniform(self.scale_speed_lim[0],
+                                        self.scale_speed_lim[1])
+        x_speed = np.random.uniform(self.x_speed_lim[0],
+                                    self.x_speed_lim[1])
+        y_speed = np.random.uniform(self.y_speed_lim[0],
+                                    self.y_speed_lim[1])
+        if self.angle_speed_lim[0] == self.angle_speed_lim[1]:
+            angle_speed = self.angle_speed_lim[0]
+        else:
+            angle_speed = np.random.randint(self.angle_speed_lim[0],
+                                            self.angle_speed_lim[1])
+
+        return dict(
+            scale_speed=scale_speed,
+            x_speed=x_speed,
+            y_speed=y_speed,
+            angle_speed=angle_speed
+        )
+
+
+    def render_current_state(self):
+        '''
+        Render all the digits onto an image
+        :return:
+        '''
+        # Get frame for each digit
+        digit_frames = []
+        for j in range(self.num_images):
+            trans = get_center_translation_matrix(self.rotated_images[j], self.states[j]['x'], self.states[j]['y'])
+            if self.is_src_grayscale:
+                digit_frame = cv2.warpPerspective(self.rotated_images[j], trans, self.video_size)
+            else:
+                digit_frame = np.zeros((self.video_size[0], self.video_size[1], 3), dtype=np.uint8)
+                for c in range(3):
+                    digit_frame[:, :, c] = cv2.warpPerspective(np.squeeze(self.rotated_images[j][:, :, c]), trans, self.video_size[:2])
+            digit_frames.append(digit_frame)
+
+        # Overlay frames
+        stitched_frame = np.zeros(digit_frames[0].shape, dtype=np.uint8)
+        for j in range(self.num_images):
+            stitched_frame = overlay_image(digit_frames[j], stitched_frame)
+
+        # Binarize frame if specified
+        if self.binary_output:
+            _, stitched_frame = cv2.threshold(stitched_frame, 1, 255, cv2.THRESH_BINARY)
+        return stitched_frame
+
+
+    def step(self):
+        '''
+        Step through the dynamics for each digit
+        :return:
+        '''
+
+        self.rotated_images = []
+
+        for j in range(self.num_images):
+            image_state = self.states[j]
+            update_params = self.update_params[j]
+
+            # Update state
+            image_state['x'] += update_params['x_speed']
+            image_state['y'] += update_params['y_speed']
+            image_state['angle'] = (image_state['angle'] + update_params['angle_speed'])
+            image_state['scale'] += update_params['scale_speed']
+
+            # Update parameters that don't require the image size
+            # Scale
+            if image_state['scale'] > self.scale_lim[1]:
+                image_state['scale'] = self.scale_lim[1] - (image_state['scale'] - self.scale_lim[1])
+                update_params['scale_speed'] *= -1
+            elif image_state['scale'] < self.scale_lim[0]:
+                image_state['scale'] = self.scale_lim[0] - (image_state['scale'] - self.scale_lim[0])
+                update_params['scale_speed'] *= -1
+
+            # Angle
+            new_angle = image_state['angle']
+            if self.angle_lim[0] <= self.angle_lim[1] and (new_angle < self.angle_lim[0] or new_angle > self.angle_lim[1]):
+                # We crossed an angle border
+                if update_params['angle_speed'] < 0:
+                    # Crossed first border
+                    diff = (self.angle_lim[0] - new_angle) % 360
+                    image_state['angle'] = (self.angle_lim[0] + diff)
+                    update_params['angle_speed'] *= -1
+                else:
+                    # Crossed second border
+                    diff = (new_angle - self.angle_lim[1]) % 360
+                    image_state['angle'] = (self.angle_lim[1] - diff)
+                    update_params['angle_speed'] *= -1
+            elif self.angle_lim[0] > self.angle_lim[1] and (new_angle > self.angle_lim[1] and new_angle < self.angle_lim[0]):
+                # We crossed an angle border
+                if update_params['angle_speed'] < 0:
+                    # Crossed first border
+                    diff = (self.angle_lim[0] - new_angle) % 360
+                    image_state['angle'] = (self.angle_lim[0] + diff)
+                    update_params['angle_speed'] *= -1
+                else:
+                    # Crossed second border
+                    diff = (new_angle - self.angle_lim[1]) % 360
+                    image_state['angle'] = (self.angle_lim[1] - diff)
+                    update_params['angle_speed'] *= -1
+            image_state['angle'] %= 360
+
+            # Generate the cropped image
+            cropped_digit = get_rotated_scaled_image_tight_crop(self.images[j], image_state['angle'], image_state['scale'])
+            self.rotated_images.append(cropped_digit)
+
+            # Bounce image off the walls (requires image size)
+            x_right = image_state['x'] + cropped_digit.shape[1] / 2
+            x_left = image_state['x'] - cropped_digit.shape[1] / 2
+            if x_right > self.x_lim[1] or x_left < self.x_lim[0]:
+                if x_right > self.x_lim[1]:
+                    # x_right = x_max - (x_right - x_max)
+                    x_right = self.x_lim[1]
+                    image_state['x'] = x_right - cropped_digit.shape[1] / 2
+                else:
+                    # x_left = x_min - (x_left - x_min)
+                    x_left = self.x_lim[0]
+                    image_state['x'] = x_left + cropped_digit.shape[1] / 2
+                # Flip x speed
+                update_params['x_speed'] *= -1
+
+            y_bottom = image_state['y'] + cropped_digit.shape[0] / 2
+            y_top = image_state['y'] - cropped_digit.shape[0] / 2
+            if y_bottom > self.y_lim[1] or y_top < self.y_lim[0]:
+                if y_bottom > self.y_lim[1]:
+                    # y_bottom = y_max - (y_bottom - y_max)
+                    y_bottom = self.y_lim[1]
+                    image_state['y'] = y_bottom - cropped_digit.shape[0] / 2
+                else:
+                    # y_top = y_min - (y_top - y_min)
+                    y_top = self.y_lim[0]
+                    image_state['y'] = y_top + cropped_digit.shape[0] / 2
+                # Flip y speed
+                update_params['y_speed'] *= -1
 
 
 def main():
-    # Set overall video parameters
-    num_digits = 3
-    video_size = (64, 64)  # width x height
-    num_timesteps = 200
-
-    # Set parameters defining the digit dynamics
-    limit_params = dict(
-        x_lim=[0, video_size[0]],
-        y_lim=[0, video_size[1]],
-        scale_lim=[.5, 1.5]
-    )
-    update_limit_params = dict(
-        x_speed_lim=[-7, 7],
-        y_speed_lim=[-7, 7],
-        scale_speed_lim=[0, .2],
-        angle_speed_lim=[-30, 30]
+    # Construct generator
+    gen = MovingMNISTGenerator(
+        num_images=2, num_timesteps=100, video_size=(64, 64),
+        angle_lim=[-45, 45],
+        scale_lim=[.5, 1.5],
+        x_speed_lim=[-10, 10], y_speed_lim=[-10, 10],
+        scale_speed_lim=[-.1, .1], angle_speed_lim=[-10, 10]
     )
 
-    # num_digits = 50
-    # video_size = (1280, 720)  # width x height
-    # num_timesteps = 100
-    #
-    # limit_params = dict(
-    #     x_lim=[0, video_size[0]],
-    #     y_lim=[0, video_size[1]],
-    #     scale_lim=[1.5, 3.5]
-    # )
-    # update_limit_params = dict(
-    #     x_speed_lim=[-20, 20],
-    #     y_speed_lim=[-20, 20],
-    #     scale_speed_lim=[0, .4],
-    #     angle_speed_lim=[-30, 30]
-    # )
+    # Generate frames
+    frames = []
+    for i in range(gen.num_timesteps):
+        # Iterate digit dynamics
+        gen.step()
+        # Render the current image
+        stitched_frame = gen.render_current_state()
 
-    # Sample digits and dynamics
-    digit_infos = [get_random_image('training') for _ in range(num_digits)]
-    state_params = [sample_start_params(limit_params) for _ in range(num_digits)]
-    update_params = [sample_update_params(update_limit_params) for _ in range(num_digits)]
-
-    # Set up tensor to store video frames
-    num_image_channels = 1 if digit_infos[0][0].ndim == 2 else 3
-    video_tensor = np.zeros((video_size[1], video_size[0], num_image_channels, num_timesteps), dtype=np.uint8)
-    
-    for i in range(num_timesteps):
-        digit_frames = []
-
-        for j in range(num_digits):
-            # Update image parameters
-            state_params[j]['x'] += update_params[j]['x_speed']
-            state_params[j]['y'] += update_params[j]['y_speed']
-            state_params[j]['angle'] = (state_params[j]['angle'] + update_params[j]['angle_speed']) % 360
-            state_params[j]['scale'] += update_params[j]['scale_speed']
-            # Adjust scale parameter
-            if state_params[j]['scale'] > limit_params['scale_lim'][1]:
-                state_params[j]['scale'] = limit_params['scale_lim'][1] - (state_params[j]['scale'] - limit_params['scale_lim'][1])
-                update_params[j]['scale_speed'] *= -1
-            elif state_params[j]['scale'] < limit_params['scale_lim'][0]:
-                state_params[j]['scale'] = limit_params['scale_lim'][0] - (state_params[j]['scale'] - limit_params['scale_lim'][0])
-                update_params[j]['scale_speed'] *= -1
-            # Generate the cropped image
-            cropped_digit = get_rotated_scaled_image_tight_crop(digit_infos[j][0], state_params[j]['angle'], state_params[j]['scale'])
-
-            # Bounce image off the walls
-            x_right = state_params[j]['x'] + cropped_digit.shape[1]/2
-            x_left = state_params[j]['x'] - cropped_digit.shape[1]/2
-            if x_right > limit_params['x_lim'][1] or x_left < limit_params['x_lim'][0]:
-                if x_right > limit_params['x_lim'][1]:
-                    # x_right = x_max - (x_right - x_max)
-                    x_right = limit_params['x_lim'][1]
-                    state_params[j]['x'] = x_right - cropped_digit.shape[1] / 2
-                else:
-                    # x_left = x_min - (x_left - x_min)
-                    x_left = limit_params['x_lim'][0]
-                    state_params[j]['x'] = x_left + cropped_digit.shape[1] / 2
-                # Flip x speed
-                update_params[j]['x_speed'] *= -1
-
-            y_bottom = state_params[j]['y'] + cropped_digit.shape[0]/2
-            y_top = state_params[j]['y'] - cropped_digit.shape[0]/2
-            if y_bottom > limit_params['y_lim'][1] or y_top < limit_params['y_lim'][0]:
-                if y_bottom > limit_params['y_lim'][1]:
-                    # y_bottom = y_max - (y_bottom - y_max)
-                    y_bottom = limit_params['y_lim'][1]
-                    state_params[j]['y'] = y_bottom - cropped_digit.shape[0] / 2
-                else:
-                    # y_top = y_min - (y_top - y_min)
-                    y_top = limit_params['y_lim'][0]
-                    state_params[j]['y'] = y_top + cropped_digit.shape[0] / 2
-                # Flip y speed
-                update_params[j]['y_speed'] *= -1
-
-            trans = get_center_translation_matrix(cropped_digit, state_params[j]['x'], state_params[j]['y'])
-            digit_frame = cv2.warpPerspective(cropped_digit, trans, video_size)
-            digit_frames.append(digit_frame)
-
-        stitched_frame = np.zeros(video_size[::-1])
-        for j in range(num_digits):
-            stitched_frame = overlay_image(digit_frames[j], stitched_frame)
-        # Binarize frame
-        _, stitched_frame = cv2.threshold(stitched_frame, 1, 255, cv2.THRESH_BINARY)
-
+        # Preview frame
         plt.clf()
         plt.imshow(stitched_frame, cmap='gray')
         plt.draw()
         plt.pause(.01)
 
-        video_tensor[:, :, :, i] = stitched_frame[:, :, np.newaxis]
+        # Store frame
+        frames.append(stitched_frame)
         print('Finished frame %d' % i)
 
-    # Save video
-    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-    out = cv2.VideoWriter('output.avi', fourcc, 15.0, video_size)
-    for i in range(num_timesteps):
-        frame = np.stack((np.squeeze(video_tensor[:, :, :, i]),) * 3, axis=-1)
-        out.write(frame)
-    out.release()
+    # Convert frames to tensor
+    video_tensor = np.stack(frames, axis=-1)
+    # Save tensor
+    np.save('output.npy', video_tensor)
+    # Save preview video
+    save_tensor_as_mjpg('output.avi', video_tensor)
 
 
 if __name__ == '__main__':

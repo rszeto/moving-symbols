@@ -2,4 +2,4 @@
 data/training/
 data/testing/
 *.avi
-
+*.npy
