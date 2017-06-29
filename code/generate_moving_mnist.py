@@ -143,23 +143,7 @@ def overlay_image(fg, bg):
     if bg.ndim not in [2, 3]:
         raise ValueError('Background image has %d dimensions, but must have 2 or 3' % bg.ndim)
 
-    if fg.ndim == 2:
-        fg_gray = fg
-    else:
-        fg_gray = cv2.cvtColor(fg, cv2.COLOR_BGR2GRAY)
-
-    _, mask = cv2.threshold(fg_gray, 1, 255, cv2.THRESH_BINARY)
-
-    ret = bg.copy().astype(np.int)
-    for y in range(fg.shape[0]):
-        for x in range(fg.shape[1]):
-            if mask[y, x]:
-                if fg.ndim == 2:
-                    ret[y, x] = min(255, ret[y, x] + fg[y, x])
-                else:
-                    for c in range(3):
-                        ret[y, x, c] = min(255, ret[y, x, c] + fg[y, x, c])
-    return ret.astype(np.uint8)
+    return np.minimum(255, fg.astype(np.int) + bg.astype(np.int)).astype(np.uint8)
 
 
 def sample_start_params(limit_params):
@@ -316,6 +300,8 @@ def main():
         stitched_frame = np.zeros(video_size[::-1])
         for j in range(num_digits):
             stitched_frame = overlay_image(digit_frames[j], stitched_frame)
+        # Binarize frame
+        _, stitched_frame = cv2.threshold(stitched_frame, 1, 255, cv2.THRESH_BINARY)
 
         plt.clf()
         plt.imshow(stitched_frame, cmap='gray')
