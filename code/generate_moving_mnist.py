@@ -6,6 +6,7 @@ from scipy.misc import imread, imsave
 import matplotlib.pyplot as plt
 from pprint import pprint
 from time import time
+import json
 
 def tight_crop(image):
     '''
@@ -66,7 +67,7 @@ def get_rotated_scaled_image_tight_crop(image, deg, scale):
 
     crop = tight_crop(work_image)
     return crop
-    # return work_image
+
 
 def get_translation_matrix(x, y):
     '''
@@ -137,7 +138,7 @@ def save_tensor_as_mjpg(filename, video_tensor):
     :return:
     '''
     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-    out = cv2.VideoWriter('output.avi', fourcc, 15.0, tuple(video_tensor.shape[:2]))
+    out = cv2.VideoWriter('output.avi', fourcc, 15.0, tuple(video_tensor.shape[:2][::-1]))
     for i in range(video_tensor.shape[-1]):
         if video_tensor.ndim == 3:
             video_frame = cv2.cvtColor(video_tensor[:, :, i], cv2.COLOR_GRAY2BGR)
@@ -161,7 +162,7 @@ class MovingMNISTGenerator:
         self.split = split
         self.num_images = num_images
         self.max_image_size = max_image_size
-        self.video_size = video_size
+        self.video_size = tuple(video_size)
         self.num_timesteps = num_timesteps
         self.binary_output = binary_output
         self.angle_lim = [x % 360 for x in angle_lim]
@@ -185,6 +186,9 @@ class MovingMNISTGenerator:
         self.states = [self.__sample_start_states__() for _ in range(num_images)]
         self.update_params = [self.__sample_update_params__() for _ in range(num_images)]
 
+        # Set empty video cache
+        self.video_tensor = None
+
 
     def __get_digit__(self):
         '''
@@ -194,7 +198,7 @@ class MovingMNISTGenerator:
         label = np.random.randint(10)
         digit_dir = os.path.join(self.data_dir, self.split, str(label))
         image = imread(os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir)))))
-        # image = np.stack([image, np.zeros(image.shape), np.zeros(image.shape)], axis=-1).astype(np.uint8)
+        image = np.stack([image, np.zeros(image.shape), np.zeros(image.shape)], axis=-1).astype(np.uint8)
         crop = tight_crop(image)
         return crop, label
 
@@ -260,9 +264,9 @@ class MovingMNISTGenerator:
             if self.is_src_grayscale:
                 digit_frame = cv2.warpPerspective(self.rotated_images[j], trans, self.video_size)
             else:
-                digit_frame = np.zeros((self.video_size[0], self.video_size[1], 3), dtype=np.uint8)
+                digit_frame = np.zeros((self.video_size[1], self.video_size[0], 3), dtype=np.uint8)
                 for c in range(3):
-                    digit_frame[:, :, c] = cv2.warpPerspective(np.squeeze(self.rotated_images[j][:, :, c]), trans, self.video_size[:2])
+                    digit_frame[:, :, c] = cv2.warpPerspective(np.squeeze(self.rotated_images[j][:, :, c]), trans, self.video_size)
             digit_frames.append(digit_frame)
 
         # Overlay frames
@@ -365,40 +369,78 @@ class MovingMNISTGenerator:
                 update_params['y_speed'] *= -1
 
 
+    def populate_video_tensor(self):
+        '''
+        Generate the video frame cache and store it as video_tensor
+        :return:
+        '''
+        if not self.video_tensor:
+            # Generate frames
+            frames = []
+            for i in range(self.num_timesteps):
+                # Iterate digit dynamics
+                self.step()
+                # Render and store the current image
+                stitched_frame = self.render_current_state()
+                frames.append(stitched_frame)
+                print('Finished frame %d' % i)
+
+            # Convert frames to tensor
+            self.video_tensor = np.stack(frames, axis=-1)
+
+
+    def save_video(self, file_path):
+        '''
+        Save the frames for this generator instance to either a NumPy or video file
+        :param file_path: Path to save to. Must end in ".npy" or ".avi"
+        :return:
+        '''
+        _, ext = os.path.splitext(file_path)
+        if ext not in ['.npy', '.avi']:
+            raise ValueError('File extension must be either ".npy" or ".avi"')
+
+        # Generate frames
+        if self.video_tensor is None:
+            self.populate_video_tensor()
+
+        # Save
+        if ext == '.npy':
+            np.save(file_path, self.video_tensor)
+        else:
+            save_tensor_as_mjpg(file_path, self.video_tensor)
+
+
+    def get_video_tensor_copy(self):
+        '''
+        Get a copy of the video tensor
+        :return:
+        '''
+        if self.video_tensor is None:
+            self.populate_video_tensor()
+        return self.video_tensor.copy()
+
+
+def create_moving_mnist_generator(param_file):
+    '''
+    Create the MovingMNISTGenerator object with parameters defined by the given JSON file
+    :param param_file: Path to the JSON file with keyword args for MovingMNISTGenerator
+    :return:
+    '''
+    with open(param_file, 'r') as f:
+        params = json.load(f)
+    return MovingMNISTGenerator(**params)
+
+
 def main():
-    # Construct generator
-    gen = MovingMNISTGenerator(
-        num_images=2, num_timesteps=100, video_size=(64, 64),
-        angle_lim=[-45, 45],
-        scale_lim=[.5, 1.5],
-        x_speed_lim=[-10, 10], y_speed_lim=[-10, 10],
-        scale_speed_lim=[-.1, .1], angle_speed_lim=[-10, 10]
-    )
+    # Create the generator
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    param_dir = os.path.join(script_dir, '..', 'params')
+    gen = create_moving_mnist_generator(os.path.join(param_dir, 'test.json'))
 
-    # Generate frames
-    frames = []
-    for i in range(gen.num_timesteps):
-        # Iterate digit dynamics
-        gen.step()
-        # Render the current image
-        stitched_frame = gen.render_current_state()
-
-        # Preview frame
-        plt.clf()
-        plt.imshow(stitched_frame, cmap='gray')
-        plt.draw()
-        plt.pause(.01)
-
-        # Store frame
-        frames.append(stitched_frame)
-        print('Finished frame %d' % i)
-
-    # Convert frames to tensor
-    video_tensor = np.stack(frames, axis=-1)
     # Save tensor
-    np.save('output.npy', video_tensor)
+    gen.save_video('output.npy')
     # Save preview video
-    save_tensor_as_mjpg('output.avi', video_tensor)
+    gen.save_video('output.avi')
 
 
 if __name__ == '__main__':
