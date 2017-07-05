@@ -1,3 +1,4 @@
+import numpy as np
 from generate_moving_mnist import MovingMNISTGenerator
 from multiprocessing import Pool
 import json
@@ -32,4 +33,5 @@ def main():
 
 
 if __name__ == '__main__':
+    np.random.seed(0)
     main()

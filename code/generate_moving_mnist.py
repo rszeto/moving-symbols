@@ -13,8 +13,10 @@ class MovingMNISTGenerator:
                  data_dir=os.path.abspath(os.path.join(__SCRIPT_DIR__, '..', 'data')), split='training',
                  num_images=1, max_image_size=28, video_size=(64, 64), num_timesteps=30,
                  binary_output=False,
+                 x_lim=None, y_lim=None,
                  angle_lim=[0, 0], scale_lim=[1, 1],
-                 x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0]):
+                 x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0],
+                 background_file_path=None):
         self.data_dir = data_dir
         self.split = split
         self.num_images = num_images
@@ -29,8 +31,8 @@ class MovingMNISTGenerator:
         self.scale_speed_lim = scale_speed_lim
         self.angle_speed_lim = angle_speed_lim
 
-        self.x_lim = [0, video_size[0]]
-        self.y_lim = [0, video_size[1]]
+        self.x_lim = [0, video_size[0]] if x_lim is None else x_lim
+        self.y_lim = [0, video_size[1]] if y_lim is None else y_lim
 
         # Get digits and split them into image and label lists
         digit_infos = [self.__get_digit__() for _ in range(num_images)]
@@ -45,6 +47,30 @@ class MovingMNISTGenerator:
 
         # Set empty video cache
         self.video_tensor = None
+
+        # Set background image
+        if self.is_src_grayscale:
+            self.background = np.zeros((video_size[1], video_size[0]), dtype=np.uint8)
+            if background_file_path:
+                bg = imread(background_file_path)
+                if bg.ndim == 2:
+                    self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])] = \
+                        bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])]
+                else:
+                    raise ValueError('Only grayscale backgrounds are supported for grayscale digits')
+        else:
+            self.background = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
+            self.background[:, :, 3] = 255
+            if background_file_path:
+                bg = imread(background_file_path)
+                if bg.ndim != 3:
+                    raise ValueError('Only color backgrounds are supported for colored digits')
+                else:
+                    if bg.shape[2] == 4:
+                        raise NotImplementedError('Backgrounds with alpha channels are not supported')
+                    else:
+                        self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3] = \
+                            bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3]
 
 
     def __get_digit__(self):
@@ -140,7 +166,8 @@ class MovingMNISTGenerator:
             digit_frames.append(digit_frame)
 
         # Overlay frames
-        stitched_frame = np.zeros(digit_frames[0].shape, dtype=np.uint8)
+        # stitched_frame = np.zeros(digit_frames[0].shape, dtype=np.uint8)
+        stitched_frame = self.background
         for j in range(self.num_images):
             stitched_frame = overlay_image(digit_frames[j], stitched_frame)
 

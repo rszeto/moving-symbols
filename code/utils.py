@@ -109,7 +109,8 @@ def get_scale_matrix(scale):
 
 def overlay_image(fg, bg):
     '''
-    Overlay the non-zero pixels in the foreground over the pixels in the background
+    Overlay pixels in the foreground over the pixels in the background. For grayscale images, the alpha channel is
+    computed from the brightness value. Images without alpha channels are not supported.
     :param fg: The foreground image. Can be H x W grayscale for H x W x C+A
     :param bg: The background image with same dimensions as foreground
     :return:
@@ -119,9 +120,8 @@ def overlay_image(fg, bg):
     if fg.ndim not in [2, 3]:
         raise ValueError('Given images have %d dimensions, but must have 2 or 3' % fg.ndim)
     if fg.ndim == 3 and not fg.shape[2] == 4:
-        raise ValueError('Given images have three dimensions, but no alpha channel')
+        raise NotImplementedError('Color images without alpha channels are not supported')
 
-    # Compute an alpha mask (the brightness for grayscale images, largest value across channels for color)
     if fg.ndim == 2:
         # Set the foreground brightness as alpha mask
         alpha = fg / 255.0
