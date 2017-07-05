@@ -1,152 +1,9 @@
-import numpy as np
 import os
-import sys
-import cv2
-from scipy.misc import imread, imsave
-import matplotlib.pyplot as plt
-from pprint import pprint
+from scipy.misc import imread
 from time import time
 import json
 
-def tight_crop(image):
-    '''
-    Tightly crop around the non-zero values of the given image
-    :param image: w x h x <2 or 3> image matrix
-    :return:
-    '''
-    if image.ndim not in [2, 3]:
-        raise ValueError('Obtained image has %d dimensions, but must have 2 or 3' % image.ndim)
-
-    if image.ndim == 2:
-        image_gray = image
-    else:
-        image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    _, mask = cv2.threshold(image_gray, 1, 255, cv2.THRESH_BINARY)
-    nonzero_points = cv2.findNonZero(mask)
-    x, y, w, h = cv2.boundingRect(nonzero_points)
-
-    # Get crop depending on number of channels
-    if image.ndim == 2:
-        crop = image[y:y + h, x:x + w]
-    else:
-        crop = image[y:y + h, x:x + w, :]
-
-    return crop
-
-
-def get_rotated_scaled_image_tight_crop(image, deg, scale):
-    '''
-    Transform the image and return the tight crop around it
-    :param image: The image to modify and crop
-    :param def: The counterclockwise angle to rotate the image, in degrees
-    :param scale: The scale of the image
-    :return:
-    '''
-    # Rotate the image
-    rot = get_rotation_matrix(image.shape, deg)
-    # Scale the rotated image
-    s = get_scale_matrix(scale)
-    # Translate the result to the center of the workspace
-    work_size = (int(3 * scale * np.max(image.shape)),) * 2
-    trans = get_translation_matrix(work_size[0]/4, work_size[1]/4)
-    M = np.dot(trans, np.dot(s, rot))
-
-    # Generate image on work space
-    if image.ndim == 2:
-        work_image = cv2.warpPerspective(image, M, tuple(work_size))
-    elif image.ndim == 3:
-        # Transform each channel individually
-        work_channels = []
-        for c in range(3):
-            work_channel = cv2.warpPerspective(image[:, :, c], M, tuple(work_size[:2]))
-            work_channels.append(work_channel)
-        work_image = np.stack(work_channels, axis=-1)
-    else:
-        raise ValueError('Image matrix must have either two or three dimensions')
-
-    crop = tight_crop(work_image)
-    return crop
-
-
-def get_translation_matrix(x, y):
-    '''
-    Get the 3x3 matrix corresponding to a translation from the top-left corner
-    :param x: The horizontal displacement (coming from the left)
-    :param y: The vertical displacement (coming from the top)
-    :return:
-    '''
-    trans = np.array([[1, 0, x], [0, 1, y]], dtype=np.float32)
-    return np.concatenate((trans, [[0, 0, 1]]))
-
-
-def get_center_translation_matrix(image, x, y):
-    '''
-    Get the 3x3 matrix corresponding to moving the image's center to (x, y)
-    :param image: The image to be translated
-    :param x: The horizontal displacement (coming from the left)
-    :param y: The vertical displacement (coming from the top)
-    :return:
-    '''
-    return get_translation_matrix(x - image.shape[1]/2, y - image.shape[0]/2)
-
-
-def get_rotation_matrix(image_size, deg):
-    '''
-    Get the 3x3 matrix corresponding to a counter-clockwise rotation from the center of the image
-    :param image_size: The size of the image to rotate (height x width)
-    :param deg: The angle to rotate by in degrees
-    :return:
-    '''
-
-    rot = cv2.getRotationMatrix2D((image_size[1]/2, image_size[0]/2), deg, 1)
-    return np.concatenate((rot, [[0, 0, 1]]))
-
-
-def get_scale_matrix(scale):
-    '''
-    Get the 3x3 matrix corresponding to a scaling.
-    :param scale: The ratio of the result to the original image
-    :return:
-    '''
-    s = np.array([[scale, 0, 0], [0, scale, 0]], dtype=np.float32)
-    return np.concatenate((s, [[0, 0, 1]]))
-
-
-def overlay_image(fg, bg):
-    '''
-    Overlay the non-zero pixels in the foreground over the pixels in the background
-    :param fg: The foreground image
-    :param bg: The background image
-    :return:
-    '''
-    if fg.shape != bg.shape:
-        raise ValueError('Foreground and background have different sizes (fg: %s, bg: %s)' % (fg.shape, bg.shape))
-    if fg.ndim not in [2, 3]:
-        raise ValueError('Foreground image has %d dimensions, but must have 2 or 3' % fg.ndim)
-    if bg.ndim not in [2, 3]:
-        raise ValueError('Background image has %d dimensions, but must have 2 or 3' % bg.ndim)
-
-    return np.minimum(255, fg.astype(np.int) + bg.astype(np.int)).astype(np.uint8)
-
-
-def save_tensor_as_mjpg(filename, video_tensor):
-    '''
-    Saves the given video tensor as a video
-    :param filename: The location of the video
-    :param video_tensor: The H x W (x C) x T tensor of frames
-    :return:
-    '''
-    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-    out = cv2.VideoWriter('output.avi', fourcc, 15.0, tuple(video_tensor.shape[:2][::-1]))
-    for i in range(video_tensor.shape[-1]):
-        if video_tensor.ndim == 3:
-            video_frame = cv2.cvtColor(video_tensor[:, :, i], cv2.COLOR_GRAY2BGR)
-        else:
-            video_frame = video_tensor[:, :, :, i]
-        out.write(video_frame[:, :, ::-1])
-    out.release()
-
+from utils import *
 
 class MovingMNISTGenerator:
 
@@ -198,7 +55,10 @@ class MovingMNISTGenerator:
         label = np.random.randint(10)
         digit_dir = os.path.join(self.data_dir, self.split, str(label))
         image = imread(os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir)))))
-        image = np.stack([image, np.zeros(image.shape), np.zeros(image.shape)], axis=-1).astype(np.uint8)
+        # if label % 2 == 0:
+        #     image = np.stack([image, np.zeros(image.shape), np.zeros(image.shape), image], axis=-1).astype(np.uint8)
+        # else:
+        #     image = np.stack([np.zeros(image.shape), image, np.zeros(image.shape), image], axis=-1).astype(np.uint8)
         crop = tight_crop(image)
         return crop, label
 
@@ -208,12 +68,22 @@ class MovingMNISTGenerator:
         Choose starting parameters based on possible position, scale, etc.
         :return:
         '''
+        # Choose scale
         scale_start = np.random.uniform(self.scale_lim[0], self.scale_lim[1])
-        # if self.angle_lim[0] == self.angle_lim[1]:
-        #     angle_start = self.angle_lim[0]
-        # else:
-        #     angle_start = np.random.randint(self.angle_lim[0], self.angle_lim[1])
-        angle_start = 0
+        # Choose angle
+        if self.angle_lim[0] == self.angle_lim[1]:
+            # Only one choice
+            angle_start = self.angle_lim[0]
+        elif self.angle_lim[0] < self.angle_lim[1]:
+            # Going CCW ends up at larger angle
+            angle_start = np.random.randint(self.angle_lim[0], self.angle_lim[1])
+        else:
+            # Going CCW ends up at smaller angle
+            diff = self.angle_lim[1] + (360 - self.angle_lim[0])
+            # Choose between 0 and diff, inclusive
+            offset = np.random.randint(diff+1)
+            # Move diff degrees past first interval endpoint
+            angle_start = (self.angle_lim[0] + offset) % 360
         # Start far from the video frame border to avoid image clipping
         pad = (self.max_image_size / 2) * np.sqrt(2) * scale_start
         x_start = np.random.randint(np.ceil(self.x_lim[0] + pad), np.floor(self.x_lim[1] - pad))
@@ -264,8 +134,8 @@ class MovingMNISTGenerator:
             if self.is_src_grayscale:
                 digit_frame = cv2.warpPerspective(self.rotated_images[j], trans, self.video_size)
             else:
-                digit_frame = np.zeros((self.video_size[1], self.video_size[0], 3), dtype=np.uint8)
-                for c in range(3):
+                digit_frame = np.zeros((self.video_size[1], self.video_size[0], self.rotated_images[j].shape[2]), dtype=np.uint8)
+                for c in range(digit_frame.shape[2]):
                     digit_frame[:, :, c] = cv2.warpPerspective(np.squeeze(self.rotated_images[j][:, :, c]), trans, self.video_size)
             digit_frames.append(digit_frame)
 
@@ -383,10 +253,17 @@ class MovingMNISTGenerator:
                 # Render and store the current image
                 stitched_frame = self.render_current_state()
                 frames.append(stitched_frame)
-                print('Finished frame %d' % i)
 
             # Convert frames to tensor
             self.video_tensor = np.stack(frames, axis=-1)
+            # Discard alpha channel
+            if self.video_tensor.ndim == 4 and self.video_tensor.shape[2] == 4:
+                # Make sure all values from alpha channel are maximized
+                alpha = self.video_tensor[:, :, 3, :]
+                if np.max(alpha) == np.min(alpha) and np.min(alpha) == 255:
+                    self.video_tensor = self.video_tensor[:, :, :3, :]
+                else:
+                    raise RuntimeError('Video tensor has alpha channel, but not all alpha values are maximized')
 
 
     def save_video(self, file_path):
@@ -435,7 +312,7 @@ def main():
     # Create the generator
     script_dir = os.path.dirname(os.path.abspath(__file__))
     param_dir = os.path.join(script_dir, '..', 'params')
-    gen = create_moving_mnist_generator(os.path.join(param_dir, 'test.json'))
+    gen = create_moving_mnist_generator(os.path.join(param_dir, 'toronto.json'))
 
     # Save tensor
     gen.save_video('output.npy')
@@ -444,7 +321,6 @@ def main():
 
 
 if __name__ == '__main__':
-    # np.random.seed(123)
     start = time()
     main()
     end = time()
