@@ -14,6 +14,7 @@ class MovingMNISTGenerator:
                  num_images=1, max_image_size=28, video_size=(64, 64), num_timesteps=30,
                  binary_output=False,
                  x_lim=None, y_lim=None,
+                 x_init_lim=None, y_init_lim=None,
                  angle_lim=[0, 0], scale_lim=[1, 1],
                  x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0],
                  background_file_path=None):
@@ -33,6 +34,8 @@ class MovingMNISTGenerator:
 
         self.x_lim = [0, video_size[0]] if x_lim is None else x_lim
         self.y_lim = [0, video_size[1]] if y_lim is None else y_lim
+        self.x_init_lim = self.x_lim if x_init_lim is None else x_init_lim
+        self.y_init_lim = self.y_lim  if y_init_lim is None else y_init_lim
 
         # Get digits and split them into image and label lists
         digit_infos = [self.__get_digit__() for _ in range(num_images)]
@@ -112,8 +115,8 @@ class MovingMNISTGenerator:
             angle_start = (self.angle_lim[0] + offset) % 360
         # Start far from the video frame border to avoid image clipping
         pad = (self.max_image_size / 2) * np.sqrt(2) * scale_start
-        x_start = np.random.randint(np.ceil(self.x_lim[0] + pad), np.floor(self.x_lim[1] - pad))
-        y_start = np.random.randint(np.ceil(self.y_lim[0] + pad), np.floor(self.y_lim[1] - pad))
+        x_start = np.random.randint(np.ceil(self.x_init_lim[0] + pad), np.floor(self.x_init_lim[1] - pad))
+        y_start = np.random.randint(np.ceil(self.y_init_lim[0] + pad), np.floor(self.y_init_lim[1] - pad))
 
         return dict(
             scale=scale_start,
