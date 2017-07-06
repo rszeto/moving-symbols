@@ -25,7 +25,7 @@ class MovingMNISTGenerator:
         self.max_image_size = max_image_size
         self.video_size = tuple(video_size)
         self.num_timesteps = num_timesteps
-        self.angle_lim = [x % 360 for x in angle_lim]
+        self.angle_lim = None if angle_lim is None else [x % 360 for x in angle_lim]
         self.scale_lim = scale_lim
         self.x_speed_lim = x_speed_lim
         self.y_speed_lim = y_speed_lim
@@ -103,7 +103,9 @@ class MovingMNISTGenerator:
         # Choose scale
         scale_start = np.random.uniform(self.scale_lim[0], self.scale_lim[1])
         # Choose angle
-        if self.angle_lim[0] == self.angle_lim[1]:
+        if self.angle_lim is None:
+            angle_start = int(np.floor(np.random.uniform(0, 360)))
+        elif self.angle_lim[0] == self.angle_lim[1]:
             # Only one choice
             angle_start = self.angle_lim[0]
         elif self.angle_lim[0] < self.angle_lim[1]:
@@ -237,32 +239,32 @@ class MovingMNISTGenerator:
                 update_params['scale_speed'] *= -1
 
             # Angle
-            # TODO: Handle no angle limits
             new_angle = image_state['angle']
-            if self.angle_lim[0] <= self.angle_lim[1] and (new_angle < self.angle_lim[0] or new_angle > self.angle_lim[1]):
-                # We crossed an angle border
-                if update_params['angle_speed'] < 0:
-                    # Crossed first border
-                    diff = (self.angle_lim[0] - new_angle) % 360
-                    image_state['angle'] = (self.angle_lim[0] + diff)
-                    update_params['angle_speed'] *= -1
-                else:
-                    # Crossed second border
-                    diff = (new_angle - self.angle_lim[1]) % 360
-                    image_state['angle'] = (self.angle_lim[1] - diff)
-                    update_params['angle_speed'] *= -1
-            elif self.angle_lim[0] > self.angle_lim[1] and (new_angle > self.angle_lim[1] and new_angle < self.angle_lim[0]):
-                # We crossed an angle border
-                if update_params['angle_speed'] < 0:
-                    # Crossed first border
-                    diff = (self.angle_lim[0] - new_angle) % 360
-                    image_state['angle'] = (self.angle_lim[0] + diff)
-                    update_params['angle_speed'] *= -1
-                else:
-                    # Crossed second border
-                    diff = (new_angle - self.angle_lim[1]) % 360
-                    image_state['angle'] = (self.angle_lim[1] - diff)
-                    update_params['angle_speed'] *= -1
+            if self.angle_lim is not None:
+                if self.angle_lim[0] <= self.angle_lim[1] and (new_angle < self.angle_lim[0] or new_angle > self.angle_lim[1]):
+                    # We crossed an angle border
+                    if update_params['angle_speed'] < 0:
+                        # Crossed first border
+                        diff = (self.angle_lim[0] - new_angle) % 360
+                        image_state['angle'] = (self.angle_lim[0] + diff)
+                        update_params['angle_speed'] *= -1
+                    else:
+                        # Crossed second border
+                        diff = (new_angle - self.angle_lim[1]) % 360
+                        image_state['angle'] = (self.angle_lim[1] - diff)
+                        update_params['angle_speed'] *= -1
+                elif self.angle_lim[0] > self.angle_lim[1] and (new_angle > self.angle_lim[1] and new_angle < self.angle_lim[0]):
+                    # We crossed an angle border
+                    if update_params['angle_speed'] < 0:
+                        # Crossed first border
+                        diff = (self.angle_lim[0] - new_angle) % 360
+                        image_state['angle'] = (self.angle_lim[0] + diff)
+                        update_params['angle_speed'] *= -1
+                    else:
+                        # Crossed second border
+                        diff = (new_angle - self.angle_lim[1]) % 360
+                        image_state['angle'] = (self.angle_lim[1] - diff)
+                        update_params['angle_speed'] *= -1
             image_state['angle'] %= 360
 
             # Generate the cropped image
