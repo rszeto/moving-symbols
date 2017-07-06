@@ -150,8 +150,32 @@ def save_tensor_as_mjpg(filename, video_tensor):
             video_frame = cv2.cvtColor(video_tensor[:, :, i], cv2.COLOR_GRAY2BGR)
         else:
             video_frame = video_tensor[:, :, :, i]
-        # plt.imshow(video_frame)
-        # plt.draw()
-        # plt.waitforbuttonpress()
         out.write(video_frame[:, :, ::-1])
     out.release()
+
+
+def is_overlapping(a, b):
+    '''
+    Determine if two boxes are overlapping
+    :param a: The first bounding box given as [(x1, y1), (x2, y2)]
+    :param b: The second bounding box given as [(x1, y1), (x2, y2)]
+    :return:
+    '''
+    x_coords = [a[0][0], a[1][0], b[0][0], b[1][0]]
+    x_coords_alt = [b[0][0], b[1][0], a[0][0], a[1][0]]
+    is_horiz_overlap = not (np.array_equal(x_coords, sorted(x_coords)) or np.array_equal(x_coords_alt, sorted(x_coords)))
+
+    y_coords = [a[0][1], a[1][1], b[0][1], b[1][1]]
+    y_coords_alt = [b[0][1], b[1][1], a[0][1], a[1][1]]
+    is_vert_overlap = not (np.array_equal(y_coords, sorted(y_coords)) or np.array_equal(y_coords_alt, sorted(y_coords)))
+
+    # if is_horiz_overlap and is_vert_overlap:
+    #     # Compute angle of the second box's center relative to the first
+    #     a_center = [(a[0][0] + a[1][0])/2, (a[0][1] + a[1][1])/2]
+    #     b_center = [(b[0][0] + b[1][0])/2, (b[0][1] + b[1][1])/2]
+    #     angle_rad = np.arctan2((a_center[1]-b_center[1]), (b_center[0]-a_center[0]))
+    #     return (angle_rad * 180 / np.pi + 360) % 360
+    # else:
+    #     return None
+
+    return (is_horiz_overlap and is_vert_overlap)

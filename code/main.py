@@ -4,6 +4,7 @@ from multiprocessing import Pool
 import json
 import os
 from functools import partial
+import matplotlib.pyplot as plt
 
 def generate_one_video(index, gen_params):
     '''
@@ -11,8 +12,8 @@ def generate_one_video(index, gen_params):
     :param gen_params: The dictionary of parameters
     :return:
     '''
+    np.random.seed(index)
     gen = MovingMNISTGenerator(**gen_params)
-    # return gen.get_video_tensor_copy()
     gen.save_video('videos/output_%04d.avi' % index)
 
 def main():
@@ -25,7 +26,7 @@ def main():
         os.makedirs('videos')
 
     fn = partial(generate_one_video, gen_params=gen_params)
-    video_tensors = pool.map(fn, range(10))
+    video_tensors = pool.map(fn, range(100))
     # video_tensors = map(fn, range(10))
 
     # TODO: Save videos as npy
@@ -33,5 +34,4 @@ def main():
 
 
 if __name__ == '__main__':
-    np.random.seed(0)
     main()
