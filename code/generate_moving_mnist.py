@@ -18,7 +18,8 @@ class MovingMNISTGenerator:
                  x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0],
                  background_file_path=None,
                  enable_image_interaction=False,
-                 visual_debug=False):
+                 visual_debug=False,
+                 use_color=False, image_colors=None):
         self.data_dir = data_dir
         self.split = split
         self.num_images = num_images
@@ -39,12 +40,17 @@ class MovingMNISTGenerator:
         self.x_init_lim = self.x_lim if x_init_lim is None else x_init_lim
         self.y_init_lim = self.y_lim  if y_init_lim is None else y_init_lim
 
+        # Set image channel count
+        self.use_color = use_color
+        self.image_colors = image_colors
+
         # Get digits and split them into image and label lists
         digit_infos = [self.__get_digit__() for _ in range(num_images)]
         self.images, self.labels = zip(*digit_infos)
-
-        # Set image channel count
-        self.is_src_grayscale = (self.images[0].ndim == 2)
+        self.images = list(self.images)
+        self.labels = list(self.labels)
+        if self.use_color:
+            self.__colorize_digits__()
 
         # Sample starting states and update params, and initialize rotated images and BBs
         self.states = [self.__sample_start_states__() for _ in range(num_images)]
@@ -55,28 +61,23 @@ class MovingMNISTGenerator:
         self.video_tensor = None
 
         # Set background image
-        if self.is_src_grayscale:
+        if not self.use_color:
             self.background = np.zeros((video_size[1], video_size[0]), dtype=np.uint8)
             if background_file_path:
                 bg = imread(background_file_path)
-                if bg.ndim == 2:
-                    self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])] = \
-                        bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])]
-                else:
-                    raise ValueError('Only grayscale backgrounds are supported for grayscale digits')
+                if bg.ndim != 2:
+                    bg = cv2.cvtColor(bg, cv2.COLOR_RGB2GRAY)
+                self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])] = \
+                    bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])]
         else:
             self.background = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
             self.background[:, :, 3] = 255
             if background_file_path:
                 bg = imread(background_file_path)
                 if bg.ndim != 3:
-                    raise ValueError('Only color backgrounds are supported for colored digits')
-                else:
-                    if bg.shape[2] == 4:
-                        raise NotImplementedError('Backgrounds with alpha channels are not supported')
-                    else:
-                        self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3] = \
-                            bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3]
+                    bg = cv2.cvtColor(bg, cv2.COLOR_GRAY2RGB)
+                self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3] = \
+                    bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3]
 
 
     def __get_digit__(self):
@@ -87,12 +88,28 @@ class MovingMNISTGenerator:
         label = np.random.randint(10)
         digit_dir = os.path.join(self.data_dir, self.split, str(label))
         image = imread(os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir)))))
-        # if label % 2 == 0:
-        #     image = np.stack([image, np.zeros(image.shape), np.zeros(image.shape), image], axis=-1).astype(np.uint8)
-        # else:
-        #     image = np.stack([np.zeros(image.shape), image, np.zeros(image.shape), image], axis=-1).astype(np.uint8)
         crop = tight_crop(image)
         return crop, label
+
+
+    def __colorize_digits__(self):
+        '''
+        Convert the stored digits into RGBA images
+        :return:
+        '''
+        if not self.use_color:
+            raise ValueError('Attempted to colorize digits for grayscale video')
+        if self.images[0].ndim != 2:
+            raise RuntimeError('Attempted to colorize digits more than once')
+
+        # Create digit image with alpha channel
+        for i in range(self.num_images):
+            crop = self.images[i]
+            color = [255, 255, 255] if self.image_colors is None else self.image_colors[i % len(self.image_colors)]
+            channels = [color[c] * np.ones(crop.shape) for c in range(3)]
+            channels.append(crop)
+            crop = np.stack(channels, axis=-1).astype(np.uint8)
+            self.images[i] = crop
 
 
     def __sample_start_states__(self):
@@ -165,7 +182,7 @@ class MovingMNISTGenerator:
         digit_frames = []
         for j in range(self.num_images):
             trans = get_center_translation_matrix(self.rotated_images[j], self.states[j]['x'], self.states[j]['y'])
-            if self.is_src_grayscale:
+            if not self.use_color:
                 digit_frame = cv2.warpPerspective(self.rotated_images[j], trans, self.video_size)
             else:
                 digit_frame = np.zeros((self.video_size[1], self.video_size[0], self.rotated_images[j].shape[2]), dtype=np.uint8)
@@ -183,7 +200,7 @@ class MovingMNISTGenerator:
             for j in range(self.num_images):
                 a = (int(self.bounding_boxes[j][0][0]), int(self.bounding_boxes[j][0][1]))
                 b = (int(self.bounding_boxes[j][1][0]), int(self.bounding_boxes[j][1][1]))
-                if not self.is_src_grayscale:
+                if self.use_color:
                     stitched_frame[:, :, :3] = cv2.rectangle(stitched_frame[:, :, :3].copy(), a, b, (128, 128, 128))
                 else:
                     stitched_frame = cv2.rectangle(stitched_frame, a, b, 128)

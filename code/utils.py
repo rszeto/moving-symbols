@@ -169,13 +169,4 @@ def is_overlapping(a, b):
     y_coords_alt = [b[0][1], b[1][1], a[0][1], a[1][1]]
     is_vert_overlap = not (np.array_equal(y_coords, sorted(y_coords)) or np.array_equal(y_coords_alt, sorted(y_coords)))
 
-    # if is_horiz_overlap and is_vert_overlap:
-    #     # Compute angle of the second box's center relative to the first
-    #     a_center = [(a[0][0] + a[1][0])/2, (a[0][1] + a[1][1])/2]
-    #     b_center = [(b[0][0] + b[1][0])/2, (b[0][1] + b[1][1])/2]
-    #     angle_rad = np.arctan2((a_center[1]-b_center[1]), (b_center[0]-a_center[0]))
-    #     return (angle_rad * 180 / np.pi + 360) % 360
-    # else:
-    #     return None
-
     return (is_horiz_overlap and is_vert_overlap)
