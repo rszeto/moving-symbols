@@ -1,0 +1,11 @@
+{
+  "num_images": 2,
+  "num_timesteps": 20,
+  "video_size": [64, 64],
+  "angle_lim": [0, 0],
+  "scale_lim": [1.0, 1.0],
+  "x_speed_lim": [-5, 5],
+  "y_speed_lim": [-5, 5],
+  "scale_speed_lim": [0, 0],
+  "angle_speed_lim": [0, 0]
+}
