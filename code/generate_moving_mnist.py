@@ -119,22 +119,20 @@ class MovingMNISTGenerator:
         '''
         # Choose scale
         scale_start = np.random.uniform(self.scale_lim[0], self.scale_lim[1])
-        # Choose angle
-        if self.angle_lim is None:
-            angle_start = int(np.floor(np.random.uniform(0, 360)))
-        elif self.angle_lim[0] == self.angle_lim[1]:
-            # Only one choice
-            angle_start = self.angle_lim[0]
-        elif self.angle_lim[0] < self.angle_lim[1]:
-            # Going CCW ends up at larger angle
-            angle_start = np.random.randint(self.angle_lim[0], self.angle_lim[1])
+        # Choose angle. Start by choosing position in range as percentile
+        angle_percent = np.random.uniform()
+        if self.angle_lim[0] <= self.angle_lim[1]:
+            # Choose point in range
+            angle_diff = self.angle_lim[1] - self.angle_lim[0]
+            angle_start = self.angle_lim[0] + angle_percent * angle_diff
+            # Discretize
+            angle_start = int(np.round(angle_start))
         else:
             # Going CCW ends up at smaller angle
-            diff = self.angle_lim[1] + (360 - self.angle_lim[0])
-            # Choose between 0 and diff, inclusive
-            offset = np.random.randint(diff+1)
-            # Move diff degrees past first interval endpoint
-            angle_start = (self.angle_lim[0] + offset) % 360
+            angle_diff = self.angle_lim[1] + (360 - self.angle_lim[0])
+            angle_start = self.angle_lim[0] + angle_percent * angle_diff
+            # Discretize and place within [0, 360)
+            angle_start = int(np.round(angle_start)) % 360
         # Start far from the video frame border to avoid image clipping
         pad = (self.max_image_size / 2) * np.sqrt(2) * scale_start
         x_start = np.random.randint(np.ceil(self.x_init_lim[0] + pad), np.floor(self.x_init_lim[1] - pad))
@@ -159,11 +157,8 @@ class MovingMNISTGenerator:
                                     self.x_speed_lim[1])))
         y_speed = int(np.floor(np.random.uniform(self.y_speed_lim[0],
                                     self.y_speed_lim[1])))
-        if self.angle_speed_lim[0] == self.angle_speed_lim[1]:
-            angle_speed = self.angle_speed_lim[0]
-        else:
-            angle_speed = np.random.randint(self.angle_speed_lim[0],
-                                            self.angle_speed_lim[1])
+        angle_speed = int(np.floor(np.random.uniform(self.angle_speed_lim[0],
+                                                     self.angle_speed_lim[1])))
 
         return dict(
             scale_speed=scale_speed,
@@ -424,33 +419,3 @@ class MovingMNISTGenerator:
         if self.video_tensor is None:
             self.populate_video_tensor()
         return self.video_tensor.copy()
-
-
-def create_moving_mnist_generator(param_file):
-    '''
-    Create the MovingMNISTGenerator object with parameters defined by the given JSON file
-    :param param_file: Path to the JSON file with keyword args for MovingMNISTGenerator
-    :return:
-    '''
-    with open(param_file, 'r') as f:
-        params = json.load(f)
-    return MovingMNISTGenerator(**params)
-
-
-def main():
-    # Create the generator
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    param_dir = os.path.join(script_dir, '..', 'params')
-    gen = create_moving_mnist_generator(os.path.join(param_dir, 'toronto.json'))
-
-    # Save tensor
-    gen.save_video('output.npy')
-    # Save preview video
-    gen.save_video('output.avi')
-
-
-if __name__ == '__main__':
-    start = time()
-    main()
-    end = time()
-    print('%d s' % (end-start))
