@@ -218,7 +218,8 @@ class MovingMNISTGenerator:
         # Overlay frames
         stitched_frame = self.background
         # Draw digits if this is not a blink frame
-        if self.blink_rate > 1 and ((self.step_count + 1) % self.blink_rate != 0):
+        if self.blink_rate <= 1 or (self.blink_rate > 1 and (
+                        (self.step_count + 1) % self.blink_rate != 0)):
             for j in range(self.num_images):
                 stitched_frame = overlay_image(digit_frames[j], stitched_frame)
 
