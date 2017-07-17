@@ -33,7 +33,7 @@ def main():
     if not filename: exit()
     tensor = np.load(filename, mmap_mode='r')
     print(tensor.shape)
-    view_toronto_mnist_tensor(tensor, vid_id=0, delay=.01)
+    view_toronto_mnist_tensor(tensor, vid_id=0, delay=None)
 
 
 if __name__ == '__main__':

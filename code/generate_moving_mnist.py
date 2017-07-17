@@ -10,6 +10,7 @@ class MovingMNISTGenerator:
     __SCRIPT_DIR__ = os.path.dirname(os.path.abspath(__file__))
 
     def __init__(self,
+                 seed=0,
                  data_dir=os.path.abspath(os.path.join(__SCRIPT_DIR__, '..', 'data')), split='training',
                  num_images=1, max_image_size=28, video_size=(64, 64), num_timesteps=30,
                  x_lim=None, y_lim=None,
@@ -19,7 +20,15 @@ class MovingMNISTGenerator:
                  background_file_path=None,
                  enable_image_interaction=False,
                  visual_debug=False,
-                 use_color=False, image_colors=None):
+                 use_color=False, image_colors=None,
+                 digit_labels=None,
+                 blink_rate=0):
+
+        # Initialize RNG stuff
+        self.__seed_counter__ = seed
+        # Initialize step count
+        self.step_count = 0
+
         self.data_dir = data_dir
         self.split = split
         self.num_images = num_images
@@ -34,6 +43,7 @@ class MovingMNISTGenerator:
         self.angle_speed_lim = angle_speed_lim
         self.enable_image_interaction = enable_image_interaction
         self.visual_debug = visual_debug
+        self.blink_rate = blink_rate
 
         self.x_lim = [0, video_size[0]] if x_lim is None else x_lim
         self.y_lim = [0, video_size[1]] if y_lim is None else y_lim
@@ -45,6 +55,7 @@ class MovingMNISTGenerator:
         self.image_colors = image_colors
 
         # Get digits and split them into image and label lists
+        self.digit_labels = range(10) if digit_labels is None else digit_labels
         digit_infos = [self.__get_digit__() for _ in range(num_images)]
         self.images, self.labels = zip(*digit_infos)
         self.images = list(self.images)
@@ -79,14 +90,25 @@ class MovingMNISTGenerator:
                 self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3] = \
                     bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3]
 
+    
+    def __reseed_rng__(self):
+        '''
+        Reseed the RNG. This must be called before each np.random.* call
+        :return: 
+        '''
+        self.__seed_counter__ += 1
+        np.random.seed(self.__seed_counter__)
+
 
     def __get_digit__(self):
         '''
         Get random digit images (cropped) and labels
         :return:
         '''
-        label = np.random.randint(10)
+        self.__reseed_rng__()
+        label = self.digit_labels[np.random.randint(len(self.digit_labels))]
         digit_dir = os.path.join(self.data_dir, self.split, str(label))
+        self.__reseed_rng__()
         image = imread(os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir)))))
         crop = tight_crop(image)
         return crop, label
@@ -118,8 +140,10 @@ class MovingMNISTGenerator:
         :return:
         '''
         # Choose scale
+        self.__reseed_rng__()
         scale_start = np.random.uniform(self.scale_lim[0], self.scale_lim[1])
         # Choose angle. Start by choosing position in range as percentile
+        self.__reseed_rng__()
         angle_percent = np.random.uniform()
         if self.angle_lim[0] <= self.angle_lim[1]:
             # Choose point in range
@@ -135,7 +159,9 @@ class MovingMNISTGenerator:
             angle_start = int(np.round(angle_start)) % 360
         # Start far from the video frame border to avoid image clipping
         pad = (self.max_image_size / 2) * np.sqrt(2) * scale_start
+        self.__reseed_rng__()
         x_start = np.random.randint(np.ceil(self.x_init_lim[0] + pad), np.floor(self.x_init_lim[1] - pad))
+        self.__reseed_rng__()
         y_start = np.random.randint(np.ceil(self.y_init_lim[0] + pad), np.floor(self.y_init_lim[1] - pad))
 
         return dict(
@@ -151,12 +177,16 @@ class MovingMNISTGenerator:
         Choose update parameters based on possible position, scale updates, etc.
         :return:
         '''
-        scale_speed = np.random.uniform(self.scale_speed_lim[0],
-                                        self.scale_speed_lim[1])
+        self.__reseed_rng__()
         x_speed = int(np.floor(np.random.uniform(self.x_speed_lim[0],
                                     self.x_speed_lim[1])))
+        self.__reseed_rng__()
         y_speed = int(np.floor(np.random.uniform(self.y_speed_lim[0],
                                     self.y_speed_lim[1])))
+        self.__reseed_rng__()
+        scale_speed = np.random.uniform(self.scale_speed_lim[0],
+                                        self.scale_speed_lim[1])
+        self.__reseed_rng__()
         angle_speed = int(np.floor(np.random.uniform(self.angle_speed_lim[0],
                                                      self.angle_speed_lim[1])))
 
@@ -187,18 +217,20 @@ class MovingMNISTGenerator:
 
         # Overlay frames
         stitched_frame = self.background
-        for j in range(self.num_images):
-            stitched_frame = overlay_image(digit_frames[j], stitched_frame)
-
-        # Draw bounding boxes
-        if self.visual_debug:
+        # Draw digits if this is not a blink frame
+        if self.blink_rate > 1 and ((self.step_count + 1) % self.blink_rate != 0):
             for j in range(self.num_images):
-                a = (int(self.bounding_boxes[j][0][0]), int(self.bounding_boxes[j][0][1]))
-                b = (int(self.bounding_boxes[j][1][0]), int(self.bounding_boxes[j][1][1]))
-                if self.use_color:
-                    stitched_frame[:, :, :3] = cv2.rectangle(stitched_frame[:, :, :3].copy(), a, b, (128, 128, 128))
-                else:
-                    stitched_frame = cv2.rectangle(stitched_frame, a, b, 128)
+                stitched_frame = overlay_image(digit_frames[j], stitched_frame)
+
+            # Draw bounding boxes
+            if self.visual_debug:
+                for j in range(self.num_images):
+                    a = (int(self.bounding_boxes[j][0][0]), int(self.bounding_boxes[j][0][1]))
+                    b = (int(self.bounding_boxes[j][1][0]), int(self.bounding_boxes[j][1][1]))
+                    if self.use_color:
+                        stitched_frame[:, :, :3] = cv2.rectangle(stitched_frame[:, :, :3].copy(), a, b, (128, 128, 128))
+                    else:
+                        stitched_frame = cv2.rectangle(stitched_frame, a, b, 128)
 
         return stitched_frame
 
@@ -362,6 +394,9 @@ class MovingMNISTGenerator:
 
             self.bounding_boxes[j] = [(x_left, y_top), (x_right, y_bottom)]
 
+        # Increment step
+        self.step_count += 1
+
 
     def populate_video_tensor(self):
         '''
@@ -372,11 +407,11 @@ class MovingMNISTGenerator:
             # Generate frames
             frames = []
             for i in range(self.num_timesteps):
-                # Iterate digit dynamics
-                self.step()
                 # Render and store the current image
                 stitched_frame = self.render_current_state()
                 frames.append(stitched_frame)
+                # Iterate digit dynamics
+                self.step()
 
             # Convert frames to tensor
             self.video_tensor = np.stack(frames, axis=-1)

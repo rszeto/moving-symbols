@@ -16,8 +16,8 @@ def get_video_tensor(index, gen_params, seed):
     :param gen_params: The dictionary of parameters
     :return:
     '''
-    np.random.seed(seed + index)
-    gen = MovingMNISTGenerator(**gen_params)
+    # np.random.seed(seed + index)
+    gen = MovingMNISTGenerator(seed=seed+index, **gen_params)
     return gen.get_video_tensor_copy()
 
 
@@ -30,6 +30,7 @@ def main(param_file_path, save_path, num_videos, num_procs, seed):
     fn = partial(get_video_tensor, gen_params=gen_params, seed=seed)
     pool = Pool(processes=num_procs)
     video_tensors_list = pool.map(fn, range(num_videos))
+    # video_tensors_list = map(fn, range(num_videos))
 
     # Combine the frames into one tensor
     video_tensors = np.stack(video_tensors_list, axis=0)
