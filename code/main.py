@@ -16,9 +16,11 @@ def get_video_tensor(index, gen_params, seed):
     :param gen_params: The dictionary of parameters
     :return:
     '''
-    # np.random.seed(seed + index)
-    gen = MovingMNISTGenerator(seed=seed+index, **gen_params)
-    return gen.get_video_tensor_copy()
+    gen_seed = seed + index
+    gen = MovingMNISTGenerator(seed=gen_seed, **gen_params)
+    video_tensor = gen.get_video_tensor_copy()
+    description_str = str(gen.description)
+    return video_tensor, description_str, gen_seed
 
 
 def main(param_file_path, save_path, num_videos, num_procs, seed):
@@ -46,6 +48,30 @@ def main(param_file_path, save_path, num_videos, num_procs, seed):
     # TODO: Extract save_video fn from generator object
 
 
+def main2(param_file_path, save_path, num_videos, num_procs, seed):
+    from view_toronto_mnist import view_toronto_mnist_tensor
+
+    # Load the generation parameters
+    with open(param_file_path, 'r') as f:
+        gen_params = json.load(f)
+
+        # Generate video frames with a multiprocessing pool
+        fn = partial(get_video_tensor, gen_params=gen_params, seed=seed)
+        pool = Pool(processes=num_procs)
+        out = pool.map(fn, range(10))
+        # video_tensors_list = map(fn, range(num_videos))
+        video_tensors_list, descriptions, gen_seeds = zip(*out)
+
+        # Combine the frames into one tensor
+        video_tensors = np.stack(video_tensors_list, axis=0)
+        # Swap to bizarro Toronto dims
+        video_tensors = video_tensors.transpose((3, 0, 1, 2))
+        # Show video
+        view_toronto_mnist_tensor(video_tensors, delay=0.005, titles=descriptions, gen_seeds=gen_seeds, vid_id=None)
+
+    print('ay')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -56,4 +82,5 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=int(time.time()), help='Seed for RNG')
 
     args = parser.parse_args()
-    main(**vars(args))
+    # main(**vars(args))
+    main2(**vars(args))
