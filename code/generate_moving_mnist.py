@@ -119,11 +119,6 @@ class MovingMNISTGenerator:
 
         self.set_background(background_file_path)
 
-        # # Set empty text description
-        # self.description = Description()
-        # # Populate initial description
-        # self.init_description()
-
 
     def set_background(self, background_file_path):
         '''
@@ -244,102 +239,6 @@ class MovingMNISTGenerator:
             assert(meta['wall_label'] in ['north', 'south', 'east', 'west'])
         else:
             raise NotImplementedError('Messages of type %s are not supported' % message_type)
-
-
-    def init_description(self):
-        '''
-        Populate the digits and init_states fields in the Description object
-        :return:
-        '''
-        seen_label_counts = np.zeros(10)
-        total_label_counts = np.bincount(self.labels)
-
-        for i in range(self.num_images):
-            state = self.states[i]
-            update_params = self.update_params[i]
-
-            # Create digit description
-            label = self.labels[i]
-            digit = Digit(i, label)
-            self.description.digits.append(digit)
-
-            # Create location description
-            location = grid_pos_to_location(state['x'], state['y'], self.video_size)
-
-
-            digit_init_state = DigitInitialState(digit)
-            events = DigitEvent(digit)
-
-            # Describe initial scale
-            if state['scale'] > 1.2:
-                adj = Adjective(Adjective.BIG)
-                digit_init_state.qualifiers.append(adj)
-            elif state['scale'] < 0.8:
-                adj = Adjective(Adjective.SMALL)
-                digit_init_state.qualifiers.append(adj)
-
-            # Describe scale transform
-            if update_params['scale_speed'] > 0:
-                adj = Adjective(Adjective.GROW)
-                if update_params['scale_speed'] > 0.05:
-                    adj.adverbs.append(Adverb.RAPIDLY)
-                elif update_params['scale_speed'] < 0.01:
-                    adj.adverbs.append(Adverb.SLOWLY)
-                digit_init_state.qualifiers.append(adj)
-            elif update_params['scale_speed'] < 0:
-                adj = Adjective(Adjective.SHRINK)
-                if update_params['scale_speed'] < -0.05:
-                    adj.adverbs.append(Adverb.RAPIDLY)
-                elif update_params['scale_speed'] > -0.01:
-                    adj.adverbs.append(Adverb.SLOWLY)
-                digit_init_state.qualifiers.append(adj)
-
-            # Describe flashing
-            if self.blink_rate > 1:
-                adj = Adjective(Adjective.BLINK)
-                digit_init_state.qualifiers.append(adj)
-
-            # Enumerate if multiple of the same digit exist
-            seen_label_counts[label] += 1
-            if total_label_counts[label] > 1:
-                adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-                digit_init_state.qualifiers.append(adj)
-                adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-                events.qualifiers.append(adj)
-
-            # Describe translation
-            x_speed = update_params['x_speed']
-            y_speed = update_params['y_speed']
-            if x_speed != 0 or y_speed != 0:
-                verb = Verb(Verb.MOVE)
-                # Direction
-                verb.adverbs.append(point_to_cardinal_dir(x_speed, -y_speed))
-                total_speed = np.sqrt(x_speed ** 2 + y_speed ** 2)
-                # Speed
-                if total_speed > 4:
-                    verb.adverbs.append(Adverb.RAPIDLY)
-                elif total_speed < 2:
-                    verb.adverbs.append(Adverb.SLOWLY)
-                # Add verb
-                digit_init_state.actions.append(verb)
-
-            # Describe rotation
-            angle_speed = update_params['angle_speed']
-            if angle_speed != 0:
-                verb = Verb(Verb.ROTATE)
-                # Direction
-                verb.adverbs.append(Adverb.CW if angle_speed > 0 else Adverb.CCW)
-                # Speed
-                if np.abs(angle_speed) > 7:
-                    verb.adverbs.append(Adverb.RAPIDLY)
-                elif np.abs(angle_speed) < 3:
-                    verb.adverbs.append(Adverb.SLOWLY)
-                # Add verb
-                digit_init_state.actions.append(verb)
-
-            # Add initial state and event objects
-            self.description.init_states.append(digit_init_state)
-            self.description.events.append(events)
 
 
     def __reseed_rng__(self):
@@ -580,9 +479,6 @@ class MovingMNISTGenerator:
             if image_state['scale'] > self.scale_lim[1]:
                 image_state['scale'] = self.scale_lim[1] - (image_state['scale'] - self.scale_lim[1])
                 update_params['scale_speed'] *= -1
-                # # Add to description
-                # verb = Verb(Verb.SHRINKS)
-                # self.description.events[j].actions.append(verb)
 
                 # Publish scale speed reversal message
                 message = dict(
@@ -598,9 +494,6 @@ class MovingMNISTGenerator:
             elif image_state['scale'] < self.scale_lim[0]:
                 image_state['scale'] = self.scale_lim[0] - (image_state['scale'] - self.scale_lim[0])
                 update_params['scale_speed'] *= -1
-                # # Add to description
-                # verb = Verb(Verb.GROWS)
-                # self.description.events[j].actions.append(verb)
 
                 # Publish scale speed reversal message
                 message = dict(
@@ -628,11 +521,8 @@ class MovingMNISTGenerator:
                         diff = (new_angle - self.angle_lim[1]) % 360
                         image_state['angle'] = (self.angle_lim[1] - diff)
                         update_params['angle_speed'] *= -1
-                    # # Add to description
-                    # verb = Verb(Verb.ROTATE)
-                    # verb.adverbs.append(Adverb.CW if update_params['angle_speed'] > 0 else Adverb.CCW)
-                    # self.description.events[j].actions.append(verb)
 
+                    # Publish reverse angle speed message
                     message = dict(
                         type='reverse_angle_speed',
                         step=self.step_count,
@@ -655,11 +545,8 @@ class MovingMNISTGenerator:
                         diff = (new_angle - self.angle_lim[1]) % 360
                         image_state['angle'] = (self.angle_lim[1] - diff)
                         update_params['angle_speed'] *= -1
-                    # # Add to description
-                    # verb = Verb(Verb.ROTATE)
-                    # verb.adverbs.append(Adverb.CW if update_params['angle_speed'] > 0 else Adverb.CCW)
-                    # self.description.events[j].actions.append(verb)
 
+                    # Publish reverse angle speed message
                     message = dict(
                         type='reverse_angle_speed',
                         step=self.step_count,
@@ -724,11 +611,6 @@ class MovingMNISTGenerator:
                         self.update_params[k]['x_speed'] = v2_new[0]
                         self.update_params[k]['y_speed'] = v2_new[1]
 
-                        # # Add to description
-                        # verb = Verb(Verb.HIT)
-                        # verb.direct_object = self.description.digits[k]
-                        # self.description.events[j].actions.append(verb)
-
                         # Publish bounce message
                         message = dict(
                             type='bounce_off_digit',
@@ -758,10 +640,6 @@ class MovingMNISTGenerator:
                     x_right = self.x_lim[1]
                     image_state['x'] = x_right - cropped_digit.shape[1] / 2
                     x_left = image_state['x'] - cropped_digit.shape[1] / 2
-                    # # Add to description
-                    # verb = Verb(Verb.HIT)
-                    # verb.direct_object = Wall(Wall.EAST)
-                    # self.description.events[j].actions.append(verb)
 
                     # Publish wall message
                     message = dict(
@@ -778,10 +656,6 @@ class MovingMNISTGenerator:
                     x_left = self.x_lim[0]
                     image_state['x'] = x_left + cropped_digit.shape[1] / 2
                     x_right = image_state['x'] + cropped_digit.shape[1] / 2
-                    # # Add to description
-                    # verb = Verb(Verb.HIT)
-                    # verb.direct_object = Wall(Wall.WEST)
-                    # self.description.events[j].actions.append(verb)
 
                     # Publish wall message
                     message = dict(
@@ -802,10 +676,6 @@ class MovingMNISTGenerator:
                     y_bottom = self.y_lim[1]
                     image_state['y'] = y_bottom - cropped_digit.shape[0] / 2
                     y_top = image_state['y'] - cropped_digit.shape[0] / 2
-                    # # Add to description
-                    # verb = Verb(Verb.HIT)
-                    # verb.direct_object = Wall(Wall.SOUTH)
-                    # self.description.events[j].actions.append(verb)
 
                     # Publish wall message
                     message = dict(
@@ -822,10 +692,6 @@ class MovingMNISTGenerator:
                     y_top = self.y_lim[0]
                     image_state['y'] = y_top + cropped_digit.shape[0] / 2
                     y_bottom = image_state['y'] + cropped_digit.shape[0] / 2
-                    # # Add to description
-                    # verb = Verb(Verb.HIT)
-                    # verb.direct_object = Wall(Wall.NORTH)
-                    # self.description.events[j].actions.append(verb)
 
                     # Publish wall message
                     message = dict(
