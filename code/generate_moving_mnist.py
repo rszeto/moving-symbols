@@ -53,6 +53,12 @@ class MovingMNISTGenerator:
                  digit_labels=None,
                  blink_rate=0):
 
+        # Store copy of initial settings
+        settings = locals().copy()
+        # Remove variables not related to starting conditions
+        del settings['self']
+        del settings['observers']
+
         # Initialize RNG stuff
         self.__seed_counter__ = seed
         # Initialize step count
@@ -85,6 +91,14 @@ class MovingMNISTGenerator:
         # Set image channel count
         self.use_color = use_color
         self.image_colors = image_colors
+
+        # Emit settings message
+        message = dict(
+            type='settings',
+            step=-1,
+            meta=settings.copy()
+        )
+        self.publish_message(message)
 
         # Get digits and split them into image and label lists
         self.digit_labels = range(10) if digit_labels is None else digit_labels
@@ -168,7 +182,9 @@ class MovingMNISTGenerator:
         assert(isinstance(step, int) and step >= -1)
         assert(isinstance(meta, dict))
 
-        if message_type == 'digit':
+        if message_type == 'settings':
+            assert(step == -1)
+        elif message_type == 'digit':
             assert(step == -1)
             assert(set_equal(meta.keys(), ['label', 'image_path', 'id']))
             assert(isinstance(meta['label'], int))
@@ -230,100 +246,100 @@ class MovingMNISTGenerator:
             raise NotImplementedError('Messages of type %s are not supported' % message_type)
 
 
-    # def init_description(self):
-    #     '''
-    #     Populate the digits and init_states fields in the Description object
-    #     :return:
-    #     '''
-    #     seen_label_counts = np.zeros(10)
-    #     total_label_counts = np.bincount(self.labels)
-    #
-    #     for i in range(self.num_images):
-    #         state = self.states[i]
-    #         update_params = self.update_params[i]
-    #
-    #         # Create digit description
-    #         label = self.labels[i]
-    #         digit = Digit(i, label)
-    #         self.description.digits.append(digit)
-    #
-    #         # Create location description
-    #         location = grid_pos_to_location(state['x'], state['y'], self.video_size)
-    #
-    #
-    #         digit_init_state = DigitInitialState(digit)
-    #         events = DigitEvent(digit)
-    #
-    #         # Describe initial scale
-    #         if state['scale'] > 1.2:
-    #             adj = Adjective(Adjective.BIG)
-    #             digit_init_state.qualifiers.append(adj)
-    #         elif state['scale'] < 0.8:
-    #             adj = Adjective(Adjective.SMALL)
-    #             digit_init_state.qualifiers.append(adj)
-    #
-    #         # Describe scale transform
-    #         if update_params['scale_speed'] > 0:
-    #             adj = Adjective(Adjective.GROW)
-    #             if update_params['scale_speed'] > 0.05:
-    #                 adj.adverbs.append(Adverb.RAPIDLY)
-    #             elif update_params['scale_speed'] < 0.01:
-    #                 adj.adverbs.append(Adverb.SLOWLY)
-    #             digit_init_state.qualifiers.append(adj)
-    #         elif update_params['scale_speed'] < 0:
-    #             adj = Adjective(Adjective.SHRINK)
-    #             if update_params['scale_speed'] < -0.05:
-    #                 adj.adverbs.append(Adverb.RAPIDLY)
-    #             elif update_params['scale_speed'] > -0.01:
-    #                 adj.adverbs.append(Adverb.SLOWLY)
-    #             digit_init_state.qualifiers.append(adj)
-    #
-    #         # Describe flashing
-    #         if self.blink_rate > 1:
-    #             adj = Adjective(Adjective.BLINK)
-    #             digit_init_state.qualifiers.append(adj)
-    #
-    #         # Enumerate if multiple of the same digit exist
-    #         seen_label_counts[label] += 1
-    #         if total_label_counts[label] > 1:
-    #             adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-    #             digit_init_state.qualifiers.append(adj)
-    #             adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-    #             events.qualifiers.append(adj)
-    #
-    #         # Describe translation
-    #         x_speed = update_params['x_speed']
-    #         y_speed = update_params['y_speed']
-    #         if x_speed != 0 or y_speed != 0:
-    #             verb = Verb(Verb.MOVE)
-    #             # Direction
-    #             verb.adverbs.append(point_to_cardinal_dir(x_speed, -y_speed))
-    #             total_speed = np.sqrt(x_speed ** 2 + y_speed ** 2)
-    #             # Speed
-    #             if total_speed > 4:
-    #                 verb.adverbs.append(Adverb.RAPIDLY)
-    #             elif total_speed < 2:
-    #                 verb.adverbs.append(Adverb.SLOWLY)
-    #             # Add verb
-    #             digit_init_state.actions.append(verb)
-    #
-    #         # Describe rotation
-    #         angle_speed = update_params['angle_speed']
-    #         if angle_speed != 0:
-    #             verb = Verb(Verb.ROTATE)
-    #             # Direction
-    #             verb.adverbs.append(Adverb.CW if angle_speed > 0 else Adverb.CCW)
-    #             # Speed
-    #             if np.abs(angle_speed) > 7:
-    #                 verb.adverbs.append(Adverb.RAPIDLY)
-    #             elif np.abs(angle_speed) < 3:
-    #                 verb.adverbs.append(Adverb.SLOWLY)
-    #             # Add verb
-    #             digit_init_state.actions.append(verb)
-    #
-    #         # Add initial state and event objects
-    #         self.description.init_states.append(digit_init_state)
-    #         self.description.events.append(events)
+    def init_description(self):
+        '''
+        Populate the digits and init_states fields in the Description object
+        :return:
+        '''
+        seen_label_counts = np.zeros(10)
+        total_label_counts = np.bincount(self.labels)
+
+        for i in range(self.num_images):
+            state = self.states[i]
+            update_params = self.update_params[i]
+
+            # Create digit description
+            label = self.labels[i]
+            digit = Digit(i, label)
+            self.description.digits.append(digit)
+
+            # Create location description
+            location = grid_pos_to_location(state['x'], state['y'], self.video_size)
+
+
+            digit_init_state = DigitInitialState(digit)
+            events = DigitEvent(digit)
+
+            # Describe initial scale
+            if state['scale'] > 1.2:
+                adj = Adjective(Adjective.BIG)
+                digit_init_state.qualifiers.append(adj)
+            elif state['scale'] < 0.8:
+                adj = Adjective(Adjective.SMALL)
+                digit_init_state.qualifiers.append(adj)
+
+            # Describe scale transform
+            if update_params['scale_speed'] > 0:
+                adj = Adjective(Adjective.GROW)
+                if update_params['scale_speed'] > 0.05:
+                    adj.adverbs.append(Adverb.RAPIDLY)
+                elif update_params['scale_speed'] < 0.01:
+                    adj.adverbs.append(Adverb.SLOWLY)
+                digit_init_state.qualifiers.append(adj)
+            elif update_params['scale_speed'] < 0:
+                adj = Adjective(Adjective.SHRINK)
+                if update_params['scale_speed'] < -0.05:
+                    adj.adverbs.append(Adverb.RAPIDLY)
+                elif update_params['scale_speed'] > -0.01:
+                    adj.adverbs.append(Adverb.SLOWLY)
+                digit_init_state.qualifiers.append(adj)
+
+            # Describe flashing
+            if self.blink_rate > 1:
+                adj = Adjective(Adjective.BLINK)
+                digit_init_state.qualifiers.append(adj)
+
+            # Enumerate if multiple of the same digit exist
+            seen_label_counts[label] += 1
+            if total_label_counts[label] > 1:
+                adj = Adjective(count_to_enumeration(seen_label_counts[label]))
+                digit_init_state.qualifiers.append(adj)
+                adj = Adjective(count_to_enumeration(seen_label_counts[label]))
+                events.qualifiers.append(adj)
+
+            # Describe translation
+            x_speed = update_params['x_speed']
+            y_speed = update_params['y_speed']
+            if x_speed != 0 or y_speed != 0:
+                verb = Verb(Verb.MOVE)
+                # Direction
+                verb.adverbs.append(point_to_cardinal_dir(x_speed, -y_speed))
+                total_speed = np.sqrt(x_speed ** 2 + y_speed ** 2)
+                # Speed
+                if total_speed > 4:
+                    verb.adverbs.append(Adverb.RAPIDLY)
+                elif total_speed < 2:
+                    verb.adverbs.append(Adverb.SLOWLY)
+                # Add verb
+                digit_init_state.actions.append(verb)
+
+            # Describe rotation
+            angle_speed = update_params['angle_speed']
+            if angle_speed != 0:
+                verb = Verb(Verb.ROTATE)
+                # Direction
+                verb.adverbs.append(Adverb.CW if angle_speed > 0 else Adverb.CCW)
+                # Speed
+                if np.abs(angle_speed) > 7:
+                    verb.adverbs.append(Adverb.RAPIDLY)
+                elif np.abs(angle_speed) < 3:
+                    verb.adverbs.append(Adverb.SLOWLY)
+                # Add verb
+                digit_init_state.actions.append(verb)
+
+            # Add initial state and event objects
+            self.description.init_states.append(digit_init_state)
+            self.description.events.append(events)
 
 
     def __reseed_rng__(self):

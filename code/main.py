@@ -7,6 +7,7 @@ from functools import partial
 import matplotlib.pyplot as plt
 import argparse
 import time
+from text_description import create_description_from_log
 
 
 def get_video_tensor(index, gen_params, seed):
@@ -22,7 +23,8 @@ def get_video_tensor(index, gen_params, seed):
 
     video_tensor = gen.get_video_tensor_copy()
     logger.print_messages()
-    description_str = ''
+    desc = create_description_from_log(logger)
+    description_str = str(desc)
     return video_tensor, description_str, gen_seed
 
 
@@ -60,9 +62,9 @@ def main2(param_file_path, save_path, num_videos, num_procs, seed):
 
         # Generate video frames with a multiprocessing pool
         fn = partial(get_video_tensor, gen_params=gen_params, seed=seed)
-        pool = Pool(processes=num_procs)
-        out = pool.map(fn, range(1000))
-        # out = map(fn, range(10))
+        # pool = Pool(processes=num_procs)
+        # out = pool.map(fn, range(1000))
+        out = map(fn, range(1))
         # video_tensors_list = map(fn, range(num_videos))
         video_tensors_list, descriptions, gen_seeds = zip(*out)
 

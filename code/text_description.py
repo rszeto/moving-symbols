@@ -1,6 +1,5 @@
 import numpy as np
 from abc import ABCMeta, abstractmethod
-from generate_moving_mnist import MovingMNISTEventObserver
 
 
 class Description:
@@ -135,6 +134,7 @@ class Adjective:
     SMALL = 'small'
     GROW = 'growing'
     SHRINK = 'shrinking'
+    BLINK = 'blinking'
 
     def __init__(self, adjective):
         self.adverbs = []
@@ -247,3 +247,166 @@ def count_to_enumeration(count):
         return '%drd' % count
     else:
         return '%dth' % count
+
+
+def create_description_from_log(logger):
+    '''
+    Generate description from messages stored in the logger
+    :param logger:
+    :return:
+    '''
+    desc = Description()
+
+    ### Initial state ###
+    start_messages = []
+    for message in logger.messages:
+        if message['step'] != -1:
+            break
+        start_messages.append(message)
+
+    digit_messages = filter(lambda x: x['type'] == 'digit', start_messages)
+    digit_metas_list = [message['meta'] for message in digit_messages]
+    digit_metas_list.sort(key=lambda x: x['id'])
+
+    start_state_messages = filter(lambda x: x['type'] == 'start_state', start_messages)
+    start_states_list = [message['meta'] for message in start_state_messages]
+    start_states_list.sort(key=lambda x: x['digit_id'])
+
+    update_params_messages = filter(lambda x: x['type'] == 'start_update_params', start_messages)
+    update_params_list = [message['meta'] for message in update_params_messages]
+    update_params_list.sort(key=lambda x: x['digit_id'])
+
+    settings_message = filter(lambda x: x['type'] == 'settings', start_messages)[0]
+    settings = settings_message['meta']
+
+    # Populate total counts
+    num_digits = len(digit_messages)
+    total_label_counts = np.zeros(10)
+    for meta in digit_metas_list:
+        total_label_counts[meta['label']] += 1
+    # Init seen count
+    seen_label_counts = np.zeros(10)
+
+    for i in range(num_digits):
+        digit_info = digit_metas_list[i]
+        state = start_states_list[i]
+        update_params = update_params_list[i]
+
+        # Create digit description
+        digit_id, label = digit_info['id'], digit_info['label']
+        digit = Digit(digit_id, label)
+        desc.digits.append(digit)
+
+        # TODO
+        # # Create location description
+        # location = grid_pos_to_location(state['x'], state['y'], self.video_size)
+
+        digit_init_state = DigitInitialState(digit)
+        events = DigitEvent(digit)
+
+        # Describe initial scale
+        if state['scale'] > 1.2:
+            adj = Adjective(Adjective.BIG)
+            digit_init_state.qualifiers.append(adj)
+        elif state['scale'] < 0.8:
+            adj = Adjective(Adjective.SMALL)
+            digit_init_state.qualifiers.append(adj)
+
+        # Describe scale transform
+        if update_params['scale_speed'] > 0:
+            adj = Adjective(Adjective.GROW)
+            if update_params['scale_speed'] > 0.05:
+                adj.adverbs.append(Adverb.RAPIDLY)
+            elif update_params['scale_speed'] < 0.01:
+                adj.adverbs.append(Adverb.SLOWLY)
+            digit_init_state.qualifiers.append(adj)
+        elif update_params['scale_speed'] < 0:
+            adj = Adjective(Adjective.SHRINK)
+            if update_params['scale_speed'] < -0.05:
+                adj.adverbs.append(Adverb.RAPIDLY)
+            elif update_params['scale_speed'] > -0.01:
+                adj.adverbs.append(Adverb.SLOWLY)
+            digit_init_state.qualifiers.append(adj)
+
+        # Describe flashing
+        if settings['blink_rate'] > 1:
+            adj = Adjective(Adjective.BLINK)
+            digit_init_state.qualifiers.append(adj)
+
+        # Enumerate if multiple of the same digit exist
+        seen_label_counts[label] += 1
+        if total_label_counts[label] > 1:
+            adj = Adjective(count_to_enumeration(seen_label_counts[label]))
+            digit_init_state.qualifiers.append(adj)
+            adj = Adjective(count_to_enumeration(seen_label_counts[label]))
+            events.qualifiers.append(adj)
+
+        # Describe translation
+        x_speed = update_params['x_speed']
+        y_speed = update_params['y_speed']
+        if x_speed != 0 or y_speed != 0:
+            verb = Verb(Verb.MOVE)
+            # Direction
+            verb.adverbs.append(point_to_cardinal_dir(x_speed, -y_speed))
+            total_speed = np.sqrt(x_speed ** 2 + y_speed ** 2)
+            # Speed
+            if total_speed > 4:
+                verb.adverbs.append(Adverb.RAPIDLY)
+            elif total_speed < 2:
+                verb.adverbs.append(Adverb.SLOWLY)
+            # Add verb
+            digit_init_state.actions.append(verb)
+
+        # Describe rotation
+        angle_speed = update_params['angle_speed']
+        if angle_speed != 0:
+            verb = Verb(Verb.ROTATE)
+            # Direction
+            verb.adverbs.append(Adverb.CW if angle_speed > 0 else Adverb.CCW)
+            # Speed
+            if np.abs(angle_speed) > 7:
+                verb.adverbs.append(Adverb.RAPIDLY)
+            elif np.abs(angle_speed) < 3:
+                verb.adverbs.append(Adverb.SLOWLY)
+            # Add verb
+            digit_init_state.actions.append(verb)
+
+        desc.init_states.append(digit_init_state)
+        desc.events.append(events)
+
+    ### Events ###
+    nonstart_messages = filter(lambda x: x['step'] != -1, logger.messages)
+    for message in nonstart_messages:
+        message_type, meta, step = message['type'], message['meta'], message['step']
+        if message_type == 'reverse_scale_speed':
+            digit_id = meta['digit_id']
+            verb = Verb(Verb.SHRINKS if meta['new_direction'] < 0 else Verb.GROWS)
+            desc.events[digit_id].actions.append(verb)
+        elif message_type == 'reverse_angle_speed':
+            digit_id = meta['digit_id']
+            verb = Verb(Verb.ROTATE)
+            verb.adverbs.append(Adverb.CW if meta['new_direction'] > 0 else Adverb.CCW)
+            desc.events[digit_id].actions.append(verb)
+        elif message_type == 'bounce_off_digit':
+            # TODO: Also describe reverse interaction
+            digit_id = meta['digit_id_a']
+            other_digit_id = meta['digit_id_b']
+            verb = Verb(Verb.HIT)
+            verb.direct_object = desc.digits[other_digit_id]
+            desc.events[digit_id].actions.append(verb)
+        elif message_type == 'bounce_off_wall':
+            digit_id = meta['digit_id']
+            wall_label = meta['wall_label']
+            verb = Verb(Verb.HIT)
+            if wall_label == 'north':
+                wall_entity = Wall(Wall.NORTH)
+            elif wall_label == 'south':
+                wall_entity = Wall(Wall.SOUTH)
+            elif wall_label == 'east':
+                wall_entity = Wall(Wall.EAST)
+            elif wall_label == 'west':
+                wall_entity = Wall(Wall.WEST)
+            verb.direct_object = wall_entity
+            desc.events[digit_id].actions.append(verb)
+
+    return desc
