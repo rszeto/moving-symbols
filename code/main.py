@@ -64,7 +64,7 @@ def main2(param_file_path, save_path, num_videos, num_procs, seed):
         fn = partial(get_video_tensor, gen_params=gen_params, seed=seed)
         # pool = Pool(processes=num_procs)
         # out = pool.map(fn, range(1000))
-        out = map(fn, range(1))
+        out = map(fn, range(10))
         # video_tensors_list = map(fn, range(num_videos))
         video_tensors_list, descriptions, gen_seeds = zip(*out)
 

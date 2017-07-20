@@ -51,6 +51,7 @@ class MovingMNISTGenerator:
                  visual_debug=False,
                  use_color=False, image_colors=None,
                  digit_labels=None,
+                 digit_image_id=None,
                  blink_rate=0):
 
         # Store copy of initial settings
@@ -85,8 +86,16 @@ class MovingMNISTGenerator:
 
         self.x_lim = [0, video_size[0]] if x_lim is None else x_lim
         self.y_lim = [0, video_size[1]] if y_lim is None else y_lim
-        self.x_init_lim = self.x_lim if x_init_lim is None else x_init_lim
-        self.y_init_lim = self.y_lim  if y_init_lim is None else y_init_lim
+        # If unspecified, set init limits far from the border to avoid image clipping
+        pad = (self.max_image_size / 2) * np.sqrt(2) * scale_lim[1]
+        self.x_init_lim = [
+            int(np.ceil(self.x_lim[0] + pad)),
+            int(np.floor(self.x_lim[1] - pad))
+        ] if x_init_lim is None else x_init_lim
+        self.y_init_lim = [
+            int(np.ceil(self.y_lim[0] + pad)),
+            int(np.floor(self.y_lim[1] - pad))
+        ] if y_init_lim is None else y_init_lim
 
         # Set image channel count
         self.use_color = use_color
@@ -100,7 +109,13 @@ class MovingMNISTGenerator:
         )
         self.publish_message(message)
 
+        # Check that digit_image_id and digit_labels are compatible. If digit_image_id is
+        # defined, digit_labels must have length 1.
+        if digit_image_id is not None and (digit_labels is None or len(digit_labels) != 1):
+            raise ValueError('If digit_image_id is defined, digit_labels must be given and have length 1')
+
         # Get digits and split them into image and label lists
+        self.digit_image_id = digit_image_id
         self.digit_labels = range(10) if digit_labels is None else digit_labels
         digit_infos = [self.__get_digit__(i) for i in range(num_images)]
         self.images, self.labels = zip(*digit_infos)
@@ -261,6 +276,9 @@ class MovingMNISTGenerator:
         digit_dir = os.path.join(self.data_dir, self.split, str(label))
         self.__reseed_rng__()
         image_path = os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir))))
+        # Override if a specific image was specified
+        if self.digit_image_id is not None:
+            image_path = os.path.join(digit_dir, '%04d.png' % self.digit_image_id)
         image = imread(image_path)
         crop = tight_crop(image)
 
@@ -337,9 +355,9 @@ class MovingMNISTGenerator:
         # Start far from the video frame border to avoid image clipping
         pad = (self.max_image_size / 2) * np.sqrt(2) * scale_start
         self.__reseed_rng__()
-        x_start = np.random.randint(np.ceil(self.x_init_lim[0] + pad), np.floor(self.x_init_lim[1] - pad))
+        x_start = np.random.randint(self.x_init_lim[0], self.x_init_lim[1] + 1)
         self.__reseed_rng__()
-        y_start = np.random.randint(np.ceil(self.y_init_lim[0] + pad), np.floor(self.y_init_lim[1] - pad))
+        y_start = np.random.randint(self.y_init_lim[0], self.y_init_lim[1] + 1)
 
         # Set start state
         start_state = dict(
