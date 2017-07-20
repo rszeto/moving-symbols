@@ -1,5 +1,6 @@
 import numpy as np
 from abc import ABCMeta, abstractmethod
+from generate_moving_mnist import MovingMNISTEventObserver
 
 
 class Description:
@@ -26,6 +27,7 @@ class DigitInitialState:
     def __init__(self, digit):
         self.qualifiers = []
         self.digit = digit
+        self.location = None
         self.actions = []
 
     def __str__(self):
@@ -62,6 +64,36 @@ class DigitEvent:
         return ' '.join(ret_list)
 
 
+class Location:
+
+    CENTER = 'center'
+    NORTH = 'north'
+    NW = 'northwest'
+    WEST = 'west'
+    SW = 'southwest'
+    SOUTH = 'south'
+    SE = 'southeast'
+    EAST = 'east'
+    NE = 'northeast'
+
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def __init__(self):
+        pass
+
+
+def grid_pos_to_location(x, y, video_size):
+    horiz_grid_pos = int(np.floor(float(x) / video_size[0] * 3))
+    vert_grid_pos = int(np.floor(float(y) / video_size[1] * 3))
+    grid = [
+        [Location.NW, Location.NORTH, Location.NE],
+        [Location.WEST, Location.CENTER, Location.EAST],
+        [Location.SW, Location.SOUTH, Location.SE],
+    ]
+    return grid[vert_grid_pos][horiz_grid_pos]
+
+
 class Entity:
 
     __metaclass__ = ABCMeta
@@ -83,7 +115,6 @@ class Digit(Entity):
 
     def __str__(self):
         return str(self.label)
-        # return '[Digit id=%d, label=%d]' % (self.id, self.label)
 
 
 class Wall(Entity):

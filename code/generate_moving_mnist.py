@@ -2,9 +2,36 @@ import os
 from scipy.misc import imread
 from time import time
 import json
+from abc import ABCMeta, abstractmethod
+from types import UnicodeType
 
 from utils import *
-from text_description import *
+
+
+class MovingMNISTEventObserver:
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def receive_message(self, message):
+        pass
+
+
+class SimpleMovingMNISTLogger(MovingMNISTEventObserver):
+
+    def __init__(self):
+        self.messages = []
+
+    def receive_message(self, message):
+        self.messages.append(message)
+
+    def print_messages(self):
+        for message in self.messages:
+            print(message)
+
 
 class MovingMNISTGenerator:
 
@@ -12,6 +39,7 @@ class MovingMNISTGenerator:
 
     def __init__(self,
                  seed=0,
+                 observers=[],
                  data_dir=os.path.abspath(os.path.join(__SCRIPT_DIR__, '..', 'data')), split='training',
                  num_images=1, max_image_size=28, video_size=(64, 64), num_timesteps=30,
                  x_lim=None, y_lim=None,
@@ -29,6 +57,9 @@ class MovingMNISTGenerator:
         self.__seed_counter__ = seed
         # Initialize step count
         self.step_count = 0
+
+        # Initialize observer list
+        self.observers = observers
 
         self.data_dir = data_dir
         self.split = split
@@ -57,7 +88,7 @@ class MovingMNISTGenerator:
 
         # Get digits and split them into image and label lists
         self.digit_labels = range(10) if digit_labels is None else digit_labels
-        digit_infos = [self.__get_digit__() for _ in range(num_images)]
+        digit_infos = [self.__get_digit__(i) for i in range(num_images)]
         self.images, self.labels = zip(*digit_infos)
         self.images = list(self.images)
         self.labels = list(self.labels)
@@ -65,14 +96,28 @@ class MovingMNISTGenerator:
             self.__colorize_digits__()
 
         # Sample starting states and update params, and initialize rotated images and BBs
-        self.states = [self.__sample_start_states__() for _ in range(num_images)]
-        self.update_params = [self.__sample_update_params__() for _ in range(num_images)]
+        self.states = [self.__sample_start_states__(i) for i in range(num_images)]
+        self.update_params = [self.__sample_update_params__(i) for i in range(num_images)]
         self.init_rotated_images_and_bounding_boxes()
 
         # Set empty video cache
         self.video_tensor = None
 
-        # Set background image
+        self.set_background(background_file_path)
+
+        # # Set empty text description
+        # self.description = Description()
+        # # Populate initial description
+        # self.init_description()
+
+
+    def set_background(self, background_file_path):
+        '''
+        Set the background image
+        :param background_file_path: The path to the background file
+        :return:
+        '''
+        video_size = self.video_size
         if not self.use_color:
             self.background = np.zeros((video_size[1], video_size[0]), dtype=np.uint8)
             if background_file_path:
@@ -91,100 +136,194 @@ class MovingMNISTGenerator:
                 self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3] = \
                     bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3]
 
-        # Set empty text description
-        self.description = Description()
-        # Populate initial description
-        self.init_description()
+        # Publish background message
+        message = dict(
+            type='background',
+            step=-1,
+            meta=dict(
+                image_path=background_file_path
+            )
+        )
+        self.publish_message(message)
 
 
-    def init_description(self):
+    def publish_message(self, message):
+        self.verify_message(message)
+        for observer in self.observers:
+            observer.receive_message(message)
+
+
+    def verify_message(self, message):
         '''
-        Populate the digits and init_states fields in the Description object
+        Makes sure a given message is properly defined
+        :param message:
         :return:
         '''
-        seen_label_counts = np.zeros(10)
-        total_label_counts = np.bincount(self.labels)
+        assert(set_equal(message.keys(), ['type', 'step', 'meta']))
 
-        for i in range(self.num_images):
-            label = self.labels[i]
-            digit = Digit(i, label)
-            self.description.digits.append(digit)
+        message_type = message['type']
+        step = message['step']
+        meta = message['meta']
 
-            digit_init_state = DigitInitialState(digit)
-            events = DigitEvent(digit)
-            state = self.states[i]
-            update_params = self.update_params[i]
+        assert(isinstance(step, int) and step >= -1)
+        assert(isinstance(meta, dict))
 
-            # Describe initial scale
-            if state['scale'] > 1.2:
-                adj = Adjective(Adjective.BIG)
-                digit_init_state.qualifiers.append(adj)
-            elif state['scale'] < 0.8:
-                adj = Adjective(Adjective.SMALL)
-                digit_init_state.qualifiers.append(adj)
+        if message_type == 'digit':
+            assert(step == -1)
+            assert(set_equal(meta.keys(), ['label', 'image_path', 'id']))
+            assert(isinstance(meta['label'], int))
+            assert(isinstance(meta['image_path'], str))
+            assert(isinstance(meta['id'], int))
+        elif message_type == 'digit_color':
+            assert(step == -1)
+            assert(set_equal(meta.keys(), ['digit_id', 'color']))
+            assert(isinstance(meta['digit_id'], int))
+            assert(isinstance(meta['digit_id'], int))
+        elif message_type == 'background':
+            assert(step == -1)
+            assert(set_equal(meta.keys(), ['image_path']))
+            assert(meta['image_path'] is None or isinstance(meta['image_path'], UnicodeType))
+        elif message_type == 'start_state':
+            assert(step == -1)
+            assert(set_equal(meta.keys(), ['digit_id', 'scale', 'x', 'y', 'angle']))
+            for key, value in meta.iteritems():
+                if key == 'scale':
+                    assert(isinstance(value, float))
+                else:
+                    assert(isinstance(value, int))
+        elif message_type == 'start_update_params':
+            assert(step == -1)
+            assert(set_equal(meta.keys(), ['digit_id', 'scale_speed', 'x_speed', 'y_speed', 'angle_speed']))
+            for key, value in meta.iteritems():
+                if key == 'scale_speed':
+                    assert (isinstance(value, float))
+                else:
+                    assert (isinstance(value, int))
+        elif message_type == 'reverse_scale_speed':
+            assert(step > -1)
+            assert(set_equal(meta.keys(), ['digit_id', 'new_direction']))
+            assert(isinstance(meta['digit_id'], int))
+            assert(isinstance(meta['new_direction'], int))
+            assert(abs(meta['new_direction']) == 1)
+        elif message_type == 'reverse_angle_speed':
+            assert(step > -1)
+            assert(set_equal(meta.keys(), ['digit_id', 'new_direction']))
+            assert(isinstance(meta['digit_id'], int))
+            assert(isinstance(meta['new_direction'], int))
+            assert(abs(meta['new_direction']) == 1)
+        elif message_type == 'overlap':
+            assert(step > -1)
+            assert(set_equal(meta.keys(), ['digit_id_a', 'digit_id_b']))
+            assert(isinstance(meta['digit_id_a'], int))
+            assert(isinstance(meta['digit_id_b'], int))
+        elif message_type == 'bounce_off_digit':
+            assert(step > -1)
+            assert(set_equal(meta.keys(), ['digit_id_a', 'digit_id_b']))
+            assert(isinstance(meta['digit_id_a'], int))
+            assert(isinstance(meta['digit_id_b'], int))
+        elif message_type == 'bounce_off_wall':
+            assert(step > -1)
+            assert(set_equal(meta.keys(), ['digit_id', 'wall_label']))
+            assert(isinstance(meta['digit_id'], int))
+            assert(meta['wall_label'] in ['north', 'south', 'east', 'west'])
+        else:
+            raise NotImplementedError('Messages of type %s are not supported' % message_type)
 
-            # Describe scale transform
-            if update_params['scale_speed'] > 0:
-                adj = Adjective(Adjective.GROW)
-                if update_params['scale_speed'] > 0.05:
-                    adj.adverbs.append(Adverb.RAPIDLY)
-                elif update_params['scale_speed'] < 0.01:
-                    adj.adverbs.append(Adverb.SLOWLY)
-                digit_init_state.qualifiers.append(adj)
-            elif update_params['scale_speed'] < 0:
-                adj = Adjective(Adjective.SHRINK)
-                if update_params['scale_speed'] < -0.05:
-                    adj.adverbs.append(Adverb.RAPIDLY)
-                elif update_params['scale_speed'] > -0.01:
-                    adj.adverbs.append(Adverb.SLOWLY)
-                digit_init_state.qualifiers.append(adj)
 
-            # Describe flashing
-            if self.blink_rate > 1:
-                adj = Adjective(Adjective.BLINK)
-                digit_init_state.qualifiers.append(adj)
-
-            # Enumerate if multiple of the same digit exist
-            seen_label_counts[label] += 1
-            if total_label_counts[label] > 1:
-                adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-                digit_init_state.qualifiers.append(adj)
-                adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-                events.qualifiers.append(adj)
-
-            # Describe translation
-            x_speed = update_params['x_speed']
-            y_speed = update_params['y_speed']
-            if x_speed != 0 or y_speed != 0:
-                verb = Verb(Verb.MOVE)
-                # Direction
-                verb.adverbs.append(point_to_cardinal_dir(x_speed, -y_speed))
-                total_speed = np.sqrt(x_speed ** 2 + y_speed ** 2)
-                # Speed
-                if total_speed > 4:
-                    verb.adverbs.append(Adverb.RAPIDLY)
-                elif total_speed < 2:
-                    verb.adverbs.append(Adverb.SLOWLY)
-                # Add verb
-                digit_init_state.actions.append(verb)
-
-            # Describe rotation
-            angle_speed = update_params['angle_speed']
-            if angle_speed != 0:
-                verb = Verb(Verb.ROTATE)
-                # Direction
-                verb.adverbs.append(Adverb.CW if angle_speed > 0 else Adverb.CCW)
-                # Speed
-                if np.abs(angle_speed) > 7:
-                    verb.adverbs.append(Adverb.RAPIDLY)
-                elif np.abs(angle_speed) < 3:
-                    verb.adverbs.append(Adverb.SLOWLY)
-                # Add verb
-                digit_init_state.actions.append(verb)
-
-            # Add initial state and event objects
-            self.description.init_states.append(digit_init_state)
-            self.description.events.append(events)
+    # def init_description(self):
+    #     '''
+    #     Populate the digits and init_states fields in the Description object
+    #     :return:
+    #     '''
+    #     seen_label_counts = np.zeros(10)
+    #     total_label_counts = np.bincount(self.labels)
+    #
+    #     for i in range(self.num_images):
+    #         state = self.states[i]
+    #         update_params = self.update_params[i]
+    #
+    #         # Create digit description
+    #         label = self.labels[i]
+    #         digit = Digit(i, label)
+    #         self.description.digits.append(digit)
+    #
+    #         # Create location description
+    #         location = grid_pos_to_location(state['x'], state['y'], self.video_size)
+    #
+    #
+    #         digit_init_state = DigitInitialState(digit)
+    #         events = DigitEvent(digit)
+    #
+    #         # Describe initial scale
+    #         if state['scale'] > 1.2:
+    #             adj = Adjective(Adjective.BIG)
+    #             digit_init_state.qualifiers.append(adj)
+    #         elif state['scale'] < 0.8:
+    #             adj = Adjective(Adjective.SMALL)
+    #             digit_init_state.qualifiers.append(adj)
+    #
+    #         # Describe scale transform
+    #         if update_params['scale_speed'] > 0:
+    #             adj = Adjective(Adjective.GROW)
+    #             if update_params['scale_speed'] > 0.05:
+    #                 adj.adverbs.append(Adverb.RAPIDLY)
+    #             elif update_params['scale_speed'] < 0.01:
+    #                 adj.adverbs.append(Adverb.SLOWLY)
+    #             digit_init_state.qualifiers.append(adj)
+    #         elif update_params['scale_speed'] < 0:
+    #             adj = Adjective(Adjective.SHRINK)
+    #             if update_params['scale_speed'] < -0.05:
+    #                 adj.adverbs.append(Adverb.RAPIDLY)
+    #             elif update_params['scale_speed'] > -0.01:
+    #                 adj.adverbs.append(Adverb.SLOWLY)
+    #             digit_init_state.qualifiers.append(adj)
+    #
+    #         # Describe flashing
+    #         if self.blink_rate > 1:
+    #             adj = Adjective(Adjective.BLINK)
+    #             digit_init_state.qualifiers.append(adj)
+    #
+    #         # Enumerate if multiple of the same digit exist
+    #         seen_label_counts[label] += 1
+    #         if total_label_counts[label] > 1:
+    #             adj = Adjective(count_to_enumeration(seen_label_counts[label]))
+    #             digit_init_state.qualifiers.append(adj)
+    #             adj = Adjective(count_to_enumeration(seen_label_counts[label]))
+    #             events.qualifiers.append(adj)
+    #
+    #         # Describe translation
+    #         x_speed = update_params['x_speed']
+    #         y_speed = update_params['y_speed']
+    #         if x_speed != 0 or y_speed != 0:
+    #             verb = Verb(Verb.MOVE)
+    #             # Direction
+    #             verb.adverbs.append(point_to_cardinal_dir(x_speed, -y_speed))
+    #             total_speed = np.sqrt(x_speed ** 2 + y_speed ** 2)
+    #             # Speed
+    #             if total_speed > 4:
+    #                 verb.adverbs.append(Adverb.RAPIDLY)
+    #             elif total_speed < 2:
+    #                 verb.adverbs.append(Adverb.SLOWLY)
+    #             # Add verb
+    #             digit_init_state.actions.append(verb)
+    #
+    #         # Describe rotation
+    #         angle_speed = update_params['angle_speed']
+    #         if angle_speed != 0:
+    #             verb = Verb(Verb.ROTATE)
+    #             # Direction
+    #             verb.adverbs.append(Adverb.CW if angle_speed > 0 else Adverb.CCW)
+    #             # Speed
+    #             if np.abs(angle_speed) > 7:
+    #                 verb.adverbs.append(Adverb.RAPIDLY)
+    #             elif np.abs(angle_speed) < 3:
+    #                 verb.adverbs.append(Adverb.SLOWLY)
+    #             # Add verb
+    #             digit_init_state.actions.append(verb)
+    #
+    #         # Add initial state and event objects
+    #         self.description.init_states.append(digit_init_state)
+    #         self.description.events.append(events)
 
 
     def __reseed_rng__(self):
@@ -196,9 +335,10 @@ class MovingMNISTGenerator:
         np.random.seed(self.__seed_counter__)
 
 
-    def __get_digit__(self):
+    def __get_digit__(self, i):
         '''
         Get random digit images (cropped) and labels
+        :param i: The digit ID
         :return:
         '''
         self.__reseed_rng__()
@@ -208,6 +348,19 @@ class MovingMNISTGenerator:
         image_path = os.path.join(digit_dir, '%04d.png' % np.random.randint(len(os.listdir(digit_dir))))
         image = imread(image_path)
         crop = tight_crop(image)
+
+        # Publish digit message
+        message = dict(
+            type='digit',
+            step=-1,
+            meta=dict(
+                label=label,
+                image_path=image_path,
+                id=i
+            )
+        )
+        self.publish_message(message)
+
         return crop, label
 
 
@@ -230,10 +383,22 @@ class MovingMNISTGenerator:
             crop = np.stack(channels, axis=-1).astype(np.uint8)
             self.images[i] = crop
 
+            # Publish color message
+            message = dict(
+                type='digit_color',
+                step=-1,
+                meta=dict(
+                    digit_id=i,
+                    color=color
+                )
+            )
+            self.publish_message(message)
 
-    def __sample_start_states__(self):
+
+    def __sample_start_states__(self, i):
         '''
         Choose starting parameters based on possible position, scale, etc.
+        :param i: The digit ID
         :return:
         '''
         # Choose scale
@@ -261,15 +426,27 @@ class MovingMNISTGenerator:
         self.__reseed_rng__()
         y_start = np.random.randint(np.ceil(self.y_init_lim[0] + pad), np.floor(self.y_init_lim[1] - pad))
 
-        return dict(
+        # Set start state
+        start_state = dict(
+            digit_id=i,
             scale=scale_start,
             x=x_start,
             y=y_start,
             angle=angle_start
         )
 
+        # Publish start state
+        message = dict(
+            type='start_state',
+            step=-1,
+            meta=start_state.copy()
+        )
+        self.publish_message(message)
 
-    def __sample_update_params__(self):
+        return start_state
+
+
+    def __sample_update_params__(self, i):
         '''
         Choose update parameters based on possible position, scale updates, etc.
         :return:
@@ -287,12 +464,23 @@ class MovingMNISTGenerator:
         angle_speed = int(np.floor(np.random.uniform(self.angle_speed_lim[0],
                                                      self.angle_speed_lim[1])))
 
-        return dict(
+        update_params = dict(
+            digit_id=i,
             scale_speed=scale_speed,
             x_speed=x_speed,
             y_speed=y_speed,
             angle_speed=angle_speed
         )
+
+        # Publish update params
+        message = dict(
+            type='start_update_params',
+            step=-1,
+            meta=update_params.copy()
+        )
+        self.publish_message(message)
+
+        return update_params
 
 
     def render_current_state(self):
@@ -376,15 +564,38 @@ class MovingMNISTGenerator:
             if image_state['scale'] > self.scale_lim[1]:
                 image_state['scale'] = self.scale_lim[1] - (image_state['scale'] - self.scale_lim[1])
                 update_params['scale_speed'] *= -1
-                # Add to description
-                verb = Verb(Verb.SHRINKS)
-                self.description.events[j].actions.append(verb)
+                # # Add to description
+                # verb = Verb(Verb.SHRINKS)
+                # self.description.events[j].actions.append(verb)
+
+                # Publish scale speed reversal message
+                message = dict(
+                    type='reverse_scale_speed',
+                    step=self.step_count,
+                    meta=dict(
+                        digit_id=j,
+                        new_direction=-1
+                    )
+                )
+                self.publish_message(message)
+
             elif image_state['scale'] < self.scale_lim[0]:
                 image_state['scale'] = self.scale_lim[0] - (image_state['scale'] - self.scale_lim[0])
                 update_params['scale_speed'] *= -1
-                # Add to description
-                verb = Verb(Verb.GROWS)
-                self.description.events[j].actions.append(verb)
+                # # Add to description
+                # verb = Verb(Verb.GROWS)
+                # self.description.events[j].actions.append(verb)
+
+                # Publish scale speed reversal message
+                message = dict(
+                    type='reverse_scale_speed',
+                    step=self.step_count,
+                    meta=dict(
+                        digit_id=j,
+                        new_direction=1
+                    )
+                )
+                self.publish_message(message)
 
             # Angle
             new_angle = image_state['angle']
@@ -401,10 +612,21 @@ class MovingMNISTGenerator:
                         diff = (new_angle - self.angle_lim[1]) % 360
                         image_state['angle'] = (self.angle_lim[1] - diff)
                         update_params['angle_speed'] *= -1
-                    # Add to description
-                    verb = Verb(Verb.ROTATE)
-                    verb.adverbs.append(Adverb.CW if update_params['angle_speed'] > 0 else Adverb.CCW)
-                    self.description.events[j].actions.append(verb)
+                    # # Add to description
+                    # verb = Verb(Verb.ROTATE)
+                    # verb.adverbs.append(Adverb.CW if update_params['angle_speed'] > 0 else Adverb.CCW)
+                    # self.description.events[j].actions.append(verb)
+
+                    message = dict(
+                        type='reverse_angle_speed',
+                        step=self.step_count,
+                        meta=dict(
+                            digit_id=j,
+                            new_direction=int(np.sign(update_params['angle_speed']))
+                        )
+                    )
+                    self.publish_message(message)
+
                 elif self.angle_lim[0] > self.angle_lim[1] and (new_angle > self.angle_lim[1] and new_angle < self.angle_lim[0]):
                     # We crossed an angle border
                     if update_params['angle_speed'] < 0:
@@ -417,10 +639,21 @@ class MovingMNISTGenerator:
                         diff = (new_angle - self.angle_lim[1]) % 360
                         image_state['angle'] = (self.angle_lim[1] - diff)
                         update_params['angle_speed'] *= -1
-                    # Add to description
-                    verb = Verb(Verb.ROTATE)
-                    verb.adverbs.append(Adverb.CW if update_params['angle_speed'] > 0 else Adverb.CCW)
-                    self.description.events[j].actions.append(verb)
+                    # # Add to description
+                    # verb = Verb(Verb.ROTATE)
+                    # verb.adverbs.append(Adverb.CW if update_params['angle_speed'] > 0 else Adverb.CCW)
+                    # self.description.events[j].actions.append(verb)
+
+                    message = dict(
+                        type='reverse_angle_speed',
+                        step=self.step_count,
+                        meta=dict(
+                            digit_id=j,
+                            new_direction=int(np.sign(update_params['angle_speed']))
+                        )
+                    )
+                    self.publish_message(message)
+
             image_state['angle'] %= 360
 
             # Generate the cropped image
@@ -435,10 +668,10 @@ class MovingMNISTGenerator:
             self.bounding_boxes[j] = [(x_left, y_top), (x_right, y_bottom)]
 
             # Bounce image off other images
-            if self.enable_image_interaction:
-                for k in range(self.num_images):
-                    if j == k: continue
-                    if is_overlapping(self.bounding_boxes[k], self.bounding_boxes[j]):
+            for k in range(self.num_images):
+                if j == k: continue
+                if is_overlapping(self.bounding_boxes[k], self.bounding_boxes[j]):
+                    if self.enable_image_interaction:
                         other_box = self.bounding_boxes[k]
                         # Find the angle (w/ y pointing up) of current image's center relative to other image
                         angle_rad = np.arctan2(self.states[k]['y']-image_state['y'], image_state['x']-self.states[k]['x'])
@@ -475,10 +708,32 @@ class MovingMNISTGenerator:
                         self.update_params[k]['x_speed'] = v2_new[0]
                         self.update_params[k]['y_speed'] = v2_new[1]
 
-                        # Add to description
-                        verb = Verb(Verb.HIT)
-                        verb.direct_object = self.description.digits[k]
-                        self.description.events[j].actions.append(verb)
+                        # # Add to description
+                        # verb = Verb(Verb.HIT)
+                        # verb.direct_object = self.description.digits[k]
+                        # self.description.events[j].actions.append(verb)
+
+                        # Publish bounce message
+                        message = dict(
+                            type='bounce_off_digit',
+                            step=self.step_count,
+                            meta=dict(
+                                digit_id_a=j,
+                                digit_id_b=k
+                            )
+                        )
+                        self.publish_message(message)
+                    else:
+                        # Publish overlap message
+                        message = dict(
+                            type='overlap',
+                            step=self.step_count,
+                            meta=dict(
+                                digit_id_a=j,
+                                digit_id_b=k
+                            )
+                        )
+                        self.publish_message(message)
 
             # Bounce image off the walls (requires image size)
             if x_right > self.x_lim[1] or x_left < self.x_lim[0]:
@@ -487,19 +742,41 @@ class MovingMNISTGenerator:
                     x_right = self.x_lim[1]
                     image_state['x'] = x_right - cropped_digit.shape[1] / 2
                     x_left = image_state['x'] - cropped_digit.shape[1] / 2
-                    # Add to description
-                    verb = Verb(Verb.HIT)
-                    verb.direct_object = Wall(Wall.EAST)
-                    self.description.events[j].actions.append(verb)
+                    # # Add to description
+                    # verb = Verb(Verb.HIT)
+                    # verb.direct_object = Wall(Wall.EAST)
+                    # self.description.events[j].actions.append(verb)
+
+                    # Publish wall message
+                    message = dict(
+                        type='bounce_off_wall',
+                        step=self.step_count,
+                        meta=dict(
+                            digit_id=j,
+                            wall_label='east'
+                        )
+                    )
+                    self.publish_message(message)
                 else:
                     # Hit left wall
                     x_left = self.x_lim[0]
                     image_state['x'] = x_left + cropped_digit.shape[1] / 2
                     x_right = image_state['x'] + cropped_digit.shape[1] / 2
-                    # Add to description
-                    verb = Verb(Verb.HIT)
-                    verb.direct_object = Wall(Wall.WEST)
-                    self.description.events[j].actions.append(verb)
+                    # # Add to description
+                    # verb = Verb(Verb.HIT)
+                    # verb.direct_object = Wall(Wall.WEST)
+                    # self.description.events[j].actions.append(verb)
+
+                    # Publish wall message
+                    message = dict(
+                        type='bounce_off_wall',
+                        step=self.step_count,
+                        meta=dict(
+                            digit_id=j,
+                            wall_label='west'
+                        )
+                    )
+                    self.publish_message(message)
                 # Flip x speed
                 update_params['x_speed'] *= -1
 
@@ -509,19 +786,41 @@ class MovingMNISTGenerator:
                     y_bottom = self.y_lim[1]
                     image_state['y'] = y_bottom - cropped_digit.shape[0] / 2
                     y_top = image_state['y'] - cropped_digit.shape[0] / 2
-                    # Add to description
-                    verb = Verb(Verb.HIT)
-                    verb.direct_object = Wall(Wall.SOUTH)
-                    self.description.events[j].actions.append(verb)
+                    # # Add to description
+                    # verb = Verb(Verb.HIT)
+                    # verb.direct_object = Wall(Wall.SOUTH)
+                    # self.description.events[j].actions.append(verb)
+
+                    # Publish wall message
+                    message = dict(
+                        type='bounce_off_wall',
+                        step=self.step_count,
+                        meta=dict(
+                            digit_id=j,
+                            wall_label='south'
+                        )
+                    )
+                    self.publish_message(message)
                 else:
                     # Hit top (north) wall
                     y_top = self.y_lim[0]
                     image_state['y'] = y_top + cropped_digit.shape[0] / 2
                     y_bottom = image_state['y'] + cropped_digit.shape[0] / 2
-                    # Add to description
-                    verb = Verb(Verb.HIT)
-                    verb.direct_object = Wall(Wall.NORTH)
-                    self.description.events[j].actions.append(verb)
+                    # # Add to description
+                    # verb = Verb(Verb.HIT)
+                    # verb.direct_object = Wall(Wall.NORTH)
+                    # self.description.events[j].actions.append(verb)
+
+                    # Publish wall message
+                    message = dict(
+                        type='bounce_off_wall',
+                        step=self.step_count,
+                        meta=dict(
+                            digit_id=j,
+                            wall_label='north'
+                        )
+                    )
+                    self.publish_message(message)
                 # Flip y speed
                 update_params['y_speed'] *= -1
 

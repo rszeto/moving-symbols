@@ -170,3 +170,13 @@ def is_overlapping(a, b):
     is_vert_overlap = not (np.array_equal(y_coords, sorted(y_coords)) or np.array_equal(y_coords_alt, sorted(y_coords)))
 
     return (is_horiz_overlap and is_vert_overlap)
+
+
+def set_equal(a, b):
+    '''
+    Determine whether a and b, when converted to sets, are equal
+    :param a: Iterable
+    :param b: Iterable
+    :return:
+    '''
+    return set(a) == set(b)

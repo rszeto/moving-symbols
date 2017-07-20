@@ -1,5 +1,5 @@
 import numpy as np
-from generate_moving_mnist import MovingMNISTGenerator
+from generate_moving_mnist import MovingMNISTGenerator, SimpleMovingMNISTLogger
 from multiprocessing import Pool
 import json
 import os
@@ -16,10 +16,13 @@ def get_video_tensor(index, gen_params, seed):
     :param gen_params: The dictionary of parameters
     :return:
     '''
+    logger = SimpleMovingMNISTLogger()
     gen_seed = seed + index
-    gen = MovingMNISTGenerator(seed=gen_seed, **gen_params)
+    gen = MovingMNISTGenerator(seed=gen_seed, observers=[logger], **gen_params)
+
     video_tensor = gen.get_video_tensor_copy()
-    description_str = str(gen.description)
+    logger.print_messages()
+    description_str = ''
     return video_tensor, description_str, gen_seed
 
 
@@ -58,7 +61,8 @@ def main2(param_file_path, save_path, num_videos, num_procs, seed):
         # Generate video frames with a multiprocessing pool
         fn = partial(get_video_tensor, gen_params=gen_params, seed=seed)
         pool = Pool(processes=num_procs)
-        out = pool.map(fn, range(10))
+        out = pool.map(fn, range(1000))
+        # out = map(fn, range(10))
         # video_tensors_list = map(fn, range(num_videos))
         video_tensors_list, descriptions, gen_seeds = zip(*out)
 
