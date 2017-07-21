@@ -111,9 +111,14 @@ class Digit(Entity):
     def __init__(self, id, label):
         self.id = id
         self.label = label
+        self.qualifiers = []
 
     def __str__(self):
-        return str(self.label)
+        ret_list = []
+        if len(self.qualifiers) > 0:
+            ret_list.append(' , '.join([str(x) for x in self.qualifiers]))
+        ret_list.append(str(self.label))
+        return ' '.join(ret_list)
 
 
 class Wall(Entity):
@@ -135,6 +140,9 @@ class Adjective:
     GROW = 'growing'
     SHRINK = 'shrinking'
     BLINK = 'blinking'
+    RED = 'red'
+    GREEN = 'green'
+    BLUE = 'blue'
 
     def __init__(self, adjective):
         self.adverbs = []
@@ -151,6 +159,9 @@ class Verb:
     ROTATE = 'rotates'
     GROWS = 'grows'
     SHRINKS = 'shrinks'
+    STAND_STILL = 'stands still'
+    DO_NOTHING = 'does nothing'
+    OVERLAPS = 'overlaps'
 
     def __init__(self, verb, direct_object=None):
         self.verb = verb
@@ -249,7 +260,7 @@ def count_to_enumeration(count):
         return '%dth' % count
 
 
-def create_description_from_log(logger):
+def create_description_from_logger(logger):
     '''
     Generate description from messages stored in the logger
     :param logger:
@@ -276,6 +287,10 @@ def create_description_from_log(logger):
     update_params_list = [message['meta'] for message in update_params_messages]
     update_params_list.sort(key=lambda x: x['digit_id'])
 
+    color_messages = filter(lambda x: x['type'] == 'digit_color', start_messages)
+    color_list = [message['meta'] for message in color_messages]
+    color_list.sort(key=lambda x: x['digit_id'])
+
     settings_message = filter(lambda x: x['type'] == 'settings', start_messages)[0]
     settings = settings_message['meta']
 
@@ -295,10 +310,15 @@ def create_description_from_log(logger):
         # Create digit description
         digit_id, label = digit_info['id'], digit_info['label']
         digit = Digit(digit_id, label)
+
+        # Enumerate if multiple of the same digit exist
+        seen_label_counts[label] += 1
+        if total_label_counts[label] > 1:
+            adj = Adjective(count_to_enumeration(seen_label_counts[label]))
+            digit.qualifiers.append(adj)
         desc.digits.append(digit)
 
-        # TODO
-        # # Create location description
+        # TODO: Create location description
         # location = grid_pos_to_location(state['x'], state['y'], self.video_size)
 
         digit_init_state = DigitInitialState(digit)
@@ -333,14 +353,6 @@ def create_description_from_log(logger):
             adj = Adjective(Adjective.BLINK)
             digit_init_state.qualifiers.append(adj)
 
-        # Enumerate if multiple of the same digit exist
-        seen_label_counts[label] += 1
-        if total_label_counts[label] > 1:
-            adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-            digit_init_state.qualifiers.append(adj)
-            adj = Adjective(count_to_enumeration(seen_label_counts[label]))
-            events.qualifiers.append(adj)
-
         # Describe translation
         x_speed = update_params['x_speed']
         y_speed = update_params['y_speed']
@@ -371,11 +383,31 @@ def create_description_from_log(logger):
             # Add verb
             digit_init_state.actions.append(verb)
 
+        # Describe color if supported color is used
+        if len(color_list) > 0:
+            color = color_list[i]['color']
+            if np.array_equal(color, [255, 0, 0]):
+                adj = Adjective(Adjective.RED)
+                digit_init_state.qualifiers.append(adj)
+            if np.array_equal(color, [0, 255, 0]):
+                adj = Adjective(Adjective.GREEN)
+                digit_init_state.qualifiers.append(adj)
+            if np.array_equal(color, [0, 0, 255]):
+                adj = Adjective(Adjective.BLUE)
+                digit_init_state.qualifiers.append(adj)
+
+        # If no translation or rotation occurs, describe as standing still
+        if x_speed == 0 and y_speed == 0 and angle_speed == 0:
+            verb = Verb(Verb.STAND_STILL)
+            digit_init_state.actions.append(verb)
+
+        # Finally, add to description
         desc.init_states.append(digit_init_state)
         desc.events.append(events)
 
     ### Events ###
     nonstart_messages = filter(lambda x: x['step'] != -1, logger.messages)
+    overlap_step_map = {}
     for message in nonstart_messages:
         message_type, meta, step = message['type'], message['meta'], message['step']
         if message_type == 'reverse_scale_speed':
@@ -408,5 +440,21 @@ def create_description_from_log(logger):
                 wall_entity = Wall(Wall.WEST)
             verb.direct_object = wall_entity
             desc.events[digit_id].actions.append(verb)
+        elif message_type == 'overlap':
+            id_a = meta['digit_id_a']
+            id_b = meta['digit_id_b']
+            last_overlap_step = overlap_step_map.get((id_a, id_b), None)
+            if last_overlap_step is None or last_overlap_step != step-1:
+                verb = Verb(Verb.OVERLAPS)
+                verb.direct_object = desc.digits[id_b]
+                desc.events[id_a].actions.append(verb)
+            overlap_step_map[(id_a, id_b)] = step
+
+
+    # If any digit does nothing, add the do-nothing description
+    for i in range(num_digits):
+        if len(desc.events[i].actions) == 0:
+            verb = Verb(Verb.DO_NOTHING)
+            desc.events[i].actions.append(verb)
 
     return desc

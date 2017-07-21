@@ -7,10 +7,11 @@ from functools import partial
 import matplotlib.pyplot as plt
 import argparse
 import time
-from text_description import create_description_from_log
+from text_description import create_description_from_logger
+import h5py
 
 
-def get_video_tensor(index, gen_params, seed):
+def generate_video_data(index, gen_params, seed):
     '''
     Generate a video tensor with the given parameters.
     :param index: Which job this is
@@ -19,74 +20,61 @@ def get_video_tensor(index, gen_params, seed):
     '''
     logger = SimpleMovingMNISTLogger()
     gen_seed = seed + index
+    # print(gen_seed)
     gen = MovingMNISTGenerator(seed=gen_seed, observers=[logger], **gen_params)
 
     video_tensor = gen.get_video_tensor_copy()
-    logger.print_messages()
-    desc = create_description_from_log(logger)
-    description_str = str(desc)
-    return video_tensor, description_str, gen_seed
+    desc = create_description_from_logger(logger)
+    text_desc = str(desc)
+    return video_tensor, logger.messages, text_desc
 
 
-def main(param_file_path, save_path, num_videos, num_procs, seed):
+def main(param_file_path, save_prefix, num_videos, num_procs, seed):
     # Load the generation parameters
     with open(param_file_path, 'r') as f:
         gen_params = json.load(f)
 
     # Generate video frames with a multiprocessing pool
-    fn = partial(get_video_tensor, gen_params=gen_params, seed=seed)
+    fn = partial(generate_video_data, gen_params=gen_params, seed=seed)
     pool = Pool(processes=num_procs)
-    video_tensors_list = pool.map(fn, range(num_videos))
-    # video_tensors_list = map(fn, range(num_videos))
+    # data = pool.map(fn, range(num_videos))
+    data = map(fn, range(num_videos))
+    video_tensors_list, messages_list, text_descs_list = zip(*data)
+    # Convert from tuples to actual lists
+    video_tensors_list = list(video_tensors_list)
+    messages_list = list(messages_list)
+    text_descs_list = list(text_descs_list)
 
     # Combine the frames into one tensor
     video_tensors = np.stack(video_tensors_list, axis=0)
     # Swap to bizarro Toronto dims
-    video_tensors = video_tensors.transpose((3, 0, 1, 2))
+    if video_tensors.ndim == 4:
+        video_tensors = video_tensors.transpose((3, 0, 1, 2))
+    else:
+        video_tensors = video_tensors.transpose((4, 0, 1, 2, 3))
+
+    # JSONify each set of messages for storing in NumPy file
+    json_messages_list = [json.dumps(messages) for messages in messages_list]
 
     # Save the file
-    save_path = os.path.abspath(save_path)
-    if not os.path.exists(os.path.dirname(save_path)):
-        os.makedirs(os.path.dirname(save_path))
-    np.save(save_path, video_tensors)
+    save_prefix = os.path.abspath(save_prefix)
+    if not os.path.exists(os.path.dirname(save_prefix)):
+        os.makedirs(os.path.dirname(save_prefix))
+    np.save('%s_videos.npy' % save_prefix, video_tensors)
+    np.save('%s_messages.npy' % save_prefix, np.array(json_messages_list))
+    np.save('%s_text_descs.npy' % save_prefix, np.array(text_descs_list))
 
     # TODO: Extract save_video fn from generator object
-
-
-def main2(param_file_path, save_path, num_videos, num_procs, seed):
-    from view_toronto_mnist import view_toronto_mnist_tensor
-
-    # Load the generation parameters
-    with open(param_file_path, 'r') as f:
-        gen_params = json.load(f)
-
-        # Generate video frames with a multiprocessing pool
-        fn = partial(get_video_tensor, gen_params=gen_params, seed=seed)
-        # pool = Pool(processes=num_procs)
-        # out = pool.map(fn, range(1000))
-        out = map(fn, range(10))
-        # video_tensors_list = map(fn, range(num_videos))
-        video_tensors_list, descriptions, gen_seeds = zip(*out)
-
-        # Combine the frames into one tensor
-        video_tensors = np.stack(video_tensors_list, axis=0)
-        # Swap to bizarro Toronto dims
-        video_tensors = video_tensors.transpose((3, 0, 1, 2))
-        # Show video
-        view_toronto_mnist_tensor(video_tensors, delay=0.005, titles=descriptions, gen_seeds=gen_seeds, vid_id=None)
-
-    print('ay')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('param_file_path', type=str, help='The path to the parameter JSON file')
-    parser.add_argument('save_path', type=str, help='The path to the file to store the data')
+    parser.add_argument('save_prefix', type=str, help='The path prefix for the saved files')
     parser.add_argument('num_videos', type=int, help='How many videos to generate')
     parser.add_argument('--num_procs', type=int, default=1, help='How many processors to use')
     parser.add_argument('--seed', type=int, default=int(time.time()), help='Seed for RNG')
 
     args = parser.parse_args()
-    # main(**vars(args))
-    main2(**vars(args))
+    main(**vars(args))

@@ -640,16 +640,17 @@ class MovingMNISTGenerator:
                         )
                         self.publish_message(message)
                     else:
-                        # Publish overlap message
-                        message = dict(
-                            type='overlap',
-                            step=self.step_count,
-                            meta=dict(
-                                digit_id_a=j,
-                                digit_id_b=k
+                        # Publish overlap message if current digit overlaps the other
+                        if j > k:
+                            message = dict(
+                                type='overlap',
+                                step=self.step_count,
+                                meta=dict(
+                                    digit_id_a=j,
+                                    digit_id_b=k
+                                )
                             )
-                        )
-                        self.publish_message(message)
+                            self.publish_message(message)
 
             # Bounce image off the walls (requires image size)
             if x_right > self.x_lim[1] or x_left < self.x_lim[0]:
