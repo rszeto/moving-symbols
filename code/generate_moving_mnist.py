@@ -87,7 +87,7 @@ class MovingMNISTGenerator:
         self.x_lim = [0, video_size[0]] if x_lim is None else x_lim
         self.y_lim = [0, video_size[1]] if y_lim is None else y_lim
         # If unspecified, set init limits far from the border to avoid image clipping
-        pad = (self.max_image_size / 2) * np.sqrt(2) * scale_lim[1]
+        pad = (self.max_image_size / 2) * scale_lim[1]
         self.x_init_lim = [
             int(np.ceil(self.x_lim[0] + pad)),
             int(np.floor(self.x_lim[1] - pad))
@@ -353,7 +353,6 @@ class MovingMNISTGenerator:
             # Discretize and place within [0, 360)
             angle_start = int(np.round(angle_start)) % 360
         # Start far from the video frame border to avoid image clipping
-        pad = (self.max_image_size / 2) * np.sqrt(2) * scale_start
         self.__reseed_rng__()
         x_start = np.random.randint(self.x_init_lim[0], self.x_init_lim[1] + 1)
         self.__reseed_rng__()

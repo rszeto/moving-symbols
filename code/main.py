@@ -37,8 +37,8 @@ def main(param_file_path, save_prefix, num_videos, num_procs, seed):
     # Generate video frames with a multiprocessing pool
     fn = partial(generate_video_data, gen_params=gen_params, seed=seed)
     pool = Pool(processes=num_procs)
-    # data = pool.map(fn, range(num_videos))
-    data = map(fn, range(num_videos))
+    data = pool.map(fn, range(num_videos))
+    # data = map(fn, range(num_videos))
     video_tensors_list, messages_list, text_descs_list = zip(*data)
     # Convert from tuples to actual lists
     video_tensors_list = list(video_tensors_list)

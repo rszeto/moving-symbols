@@ -34,6 +34,8 @@ class DigitInitialState:
         if len(self.qualifiers) > 0:
             ret_list.append(' , '.join([str(x) for x in self.qualifiers]))
         ret_list.append(str(self.digit))
+        if self.location:
+            ret_list.append('in the %s' % self.location)
         ret_list.append(str(self.actions[0]))
         if len(self.actions) > 1:
             ret_list.append('as it')
@@ -65,15 +67,15 @@ class DigitEvent:
 
 class Location:
 
-    CENTER = 'center'
-    NORTH = 'north'
-    NW = 'northwest'
-    WEST = 'west'
-    SW = 'southwest'
-    SOUTH = 'south'
-    SE = 'southeast'
-    EAST = 'east'
-    NE = 'northeast'
+    CENTER = 'center region'
+    NORTH = 'north region'
+    NW = 'northwest region'
+    WEST = 'west region'
+    SW = 'southwest region'
+    SOUTH = 'south region'
+    SE = 'southeast region'
+    EAST = 'east region'
+    NE = 'northeast region'
 
     __metaclass__ = ABCMeta
 
@@ -189,9 +191,6 @@ class Adverb:
     SE = 'southeast'
     EAST = 'east'
     NE = 'northeast'
-
-    RAPIDLY = 'rapidly'
-    SLOWLY = 'slowly'
 
     __metaclass__ = ABCMeta
 
@@ -318,8 +317,6 @@ def create_description_from_logger(logger):
             digit.qualifiers.append(adj)
         desc.digits.append(digit)
 
-        # TODO: Create location description
-        # location = grid_pos_to_location(state['x'], state['y'], self.video_size)
 
         digit_init_state = DigitInitialState(digit)
         events = DigitEvent(digit)
@@ -335,17 +332,9 @@ def create_description_from_logger(logger):
         # Describe scale transform
         if update_params['scale_speed'] > 0:
             adj = Adjective(Adjective.GROW)
-            if update_params['scale_speed'] > 0.05:
-                adj.adverbs.append(Adverb.RAPIDLY)
-            elif update_params['scale_speed'] < 0.01:
-                adj.adverbs.append(Adverb.SLOWLY)
             digit_init_state.qualifiers.append(adj)
         elif update_params['scale_speed'] < 0:
             adj = Adjective(Adjective.SHRINK)
-            if update_params['scale_speed'] < -0.05:
-                adj.adverbs.append(Adverb.RAPIDLY)
-            elif update_params['scale_speed'] > -0.01:
-                adj.adverbs.append(Adverb.SLOWLY)
             digit_init_state.qualifiers.append(adj)
 
         # Describe flashing
@@ -360,12 +349,6 @@ def create_description_from_logger(logger):
             verb = Verb(Verb.MOVE)
             # Direction
             verb.adverbs.append(point_to_cardinal_dir(x_speed, -y_speed))
-            total_speed = np.sqrt(x_speed ** 2 + y_speed ** 2)
-            # Speed
-            if total_speed > 4:
-                verb.adverbs.append(Adverb.RAPIDLY)
-            elif total_speed < 2:
-                verb.adverbs.append(Adverb.SLOWLY)
             # Add verb
             digit_init_state.actions.append(verb)
 
@@ -375,11 +358,6 @@ def create_description_from_logger(logger):
             verb = Verb(Verb.ROTATE)
             # Direction
             verb.adverbs.append(Adverb.CW if angle_speed > 0 else Adverb.CCW)
-            # Speed
-            if np.abs(angle_speed) > 7:
-                verb.adverbs.append(Adverb.RAPIDLY)
-            elif np.abs(angle_speed) < 3:
-                verb.adverbs.append(Adverb.SLOWLY)
             # Add verb
             digit_init_state.actions.append(verb)
 
@@ -395,6 +373,11 @@ def create_description_from_logger(logger):
             if np.array_equal(color, [0, 0, 255]):
                 adj = Adjective(Adjective.BLUE)
                 digit_init_state.qualifiers.append(adj)
+
+        # Describe starting location
+        video_size = settings['video_size']
+        location = grid_pos_to_location(state['x'], state['y'], video_size)
+        digit_init_state.location = location
 
         # If no translation or rotation occurs, describe as standing still
         if x_speed == 0 and y_speed == 0 and angle_speed == 0:
@@ -420,7 +403,7 @@ def create_description_from_logger(logger):
             verb.adverbs.append(Adverb.CW if meta['new_direction'] > 0 else Adverb.CCW)
             desc.events[digit_id].actions.append(verb)
         elif message_type == 'bounce_off_digit':
-            # TODO: Also describe reverse interaction
+            # TODO: Also describe reverse interaction?
             digit_id = meta['digit_id_a']
             other_digit_id = meta['digit_id_b']
             verb = Verb(Verb.HIT)

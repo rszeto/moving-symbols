@@ -81,7 +81,7 @@ def main():
 
     # Show info
     print('Video tensor shape: %s ' % str(video_tensor.shape))
-    view_toronto_mnist_tensor(video_tensor, text_descs, json_messages, delay=0.001, vid_ids=[5])
+    view_toronto_mnist_tensor(video_tensor, text_descs, json_messages, delay=0.001, vid_ids=None)
 
 
 if __name__ == '__main__':
