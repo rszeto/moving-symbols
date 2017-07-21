@@ -28,21 +28,34 @@ def generate_video_data(index, gen_params, seed):
     return video_tensor, logger.messages, text_desc
 
 
-def main(param_file_path, save_prefix, num_videos, num_procs, seed):
-    # Load the generation parameters
-    with open(param_file_path, 'r') as f:
-        gen_params = json.load(f)
+def main(param_file_paths, stratum_sizes, save_prefix, num_procs, seed):
+    if len(param_file_paths) != len(stratum_sizes):
+        print('Number of param file paths must equal number of stratum sizes')
+        return
 
-    # Generate video frames with a multiprocessing pool
-    fn = partial(generate_video_data, gen_params=gen_params, seed=seed)
+    num_strata = len(param_file_paths)
     pool = Pool(processes=num_procs)
-    data = pool.map(fn, range(num_videos))
-    # data = map(fn, range(num_videos))
-    video_tensors_list, messages_list, text_descs_list = zip(*data)
-    # Convert from tuples to actual lists
-    video_tensors_list = list(video_tensors_list)
-    messages_list = list(messages_list)
-    text_descs_list = list(text_descs_list)
+
+    video_tensors_list = []
+    messages_list = []
+    text_descs_list = []
+
+    for i in range(num_strata):
+        param_file_path = param_file_paths[i]
+        num_videos = stratum_sizes[i]
+
+        # Load the generation parameters
+        with open(param_file_path, 'r') as f:
+            gen_params = json.load(f)
+        # Generate video frames with a multiprocessing pool
+        fn = partial(generate_video_data, gen_params=gen_params, seed=seed)
+        data = pool.map(fn, range(num_videos))
+        # data = map(fn, range(num_videos))
+        cur_video_tensors_list, cur_messages_list, cur_text_descs_list = zip(*data)
+        # Convert from tuples to actual lists
+        video_tensors_list += list(cur_video_tensors_list)
+        messages_list += list(cur_messages_list)
+        text_descs_list += list(cur_text_descs_list)
 
     # Combine the frames into one tensor
     video_tensors = np.stack(video_tensors_list, axis=0)
@@ -63,15 +76,16 @@ def main(param_file_path, save_prefix, num_videos, num_procs, seed):
     np.save('%s_messages.npy' % save_prefix, np.array(json_messages_list))
     np.save('%s_text_descs.npy' % save_prefix, np.array(text_descs_list))
 
-    # TODO: Extract save_video fn from generator object
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('param_file_path', type=str, help='The path to the parameter JSON file')
-    parser.add_argument('save_prefix', type=str, help='The path prefix for the saved files')
-    parser.add_argument('num_videos', type=int, help='How many videos to generate')
+    parser.add_argument('--param_file_paths', type=str, nargs='+', required=True,
+                        help='The path to the parameter JSON file for each stratum')
+    parser.add_argument('--stratum_sizes', type=int, nargs='+', required=True,
+                        help='How many videos to generate for each stratum')
+    parser.add_argument('--save_prefix', type=str, required=True,
+                        help='The path prefix for the saved files')
     parser.add_argument('--num_procs', type=int, default=1, help='How many processors to use')
     parser.add_argument('--seed', type=int, default=int(time.time()), help='Seed for RNG')
 
