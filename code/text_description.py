@@ -15,9 +15,15 @@ class Description:
         # Initial state
         str_list.append(' , and '.join(str(x) for x in self.init_states))
         str_list.append('.')
-        str_list.append('then ,')
-        str_list.append(' . meanwhile , '.join(str(x) for x in self.events))
-        str_list.append('.')
+
+        # Events
+        event_str_list = [str(x) for x in self.events]
+        # Filter out empty events
+        event_str_list = filter(lambda x: len(x) > 0, event_str_list)
+        if len(event_str_list) > 0:
+            str_list.append('then ,')
+            str_list.append(' . meanwhile , '.join(event_str_list))
+            str_list.append('.')
         return ' '.join(str_list)
 
 
@@ -54,15 +60,18 @@ class DigitEvent:
         self.actions = []
 
     def __str__(self):
-        ret_list = ['the']
-        if len(self.qualifiers) > 0:
-            ret_list.append(' , '.join([str(x) for x in self.qualifiers]))
-        ret_list.append(str(self.digit))
-        # Append each action with "then" in between each one
-        actions_str = ' , then '.join([str(x) for x in self.actions])
-        ret_list.append(actions_str)
+        if len(self.actions) == 0:
+            return ''
+        else:
+            ret_list = ['the']
+            if len(self.qualifiers) > 0:
+                ret_list.append(' , '.join([str(x) for x in self.qualifiers]))
+            ret_list.append(str(self.digit))
+            # Append each action with "then" in between each one
+            actions_str = ' , then '.join([str(x) for x in self.actions])
+            ret_list.append(actions_str)
 
-        return ' '.join(ret_list)
+            return ' '.join(ret_list)
 
 
 class Location:
@@ -432,12 +441,5 @@ def create_description_from_logger(logger,
                 verb.direct_object = desc.digits[id_b]
                 desc.events[id_a].actions.append(verb)
             overlap_step_map[(id_a, id_b)] = step
-
-
-    # If any digit does nothing, add the do-nothing description
-    for i in range(num_digits):
-        if len(desc.events[i].actions) == 0:
-            verb = Verb(Verb.DO_NOTHING)
-            desc.events[i].actions.append(verb)
 
     return desc

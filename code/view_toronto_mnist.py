@@ -30,6 +30,7 @@ def view_toronto_mnist_tensor(toronto_tensor, text_descs, json_messages,
             # Show info
             for message in messages:
                 print(message)
+            print('Description: "%s"' % text_desc)
             for i in range(video.shape[0]):
                 plt.clf()
                 plt.title('\n'.join(wrap(text_desc, 60)))

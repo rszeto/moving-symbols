@@ -46,7 +46,10 @@ class MovingMNISTGenerator:
                  x_init_lim=None, y_init_lim=None,
                  angle_lim=[0, 0], scale_lim=[1, 1],
                  x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0],
-                 background_file_path=None,
+                 use_background=False,
+                 background_file_dir=os.path.abspath(os.path.join(__SCRIPT_DIR__, '..', 'backgrounds')),
+                 background_file_cats=None,
+                 background_file_id=None,
                  enable_image_interaction=False,
                  visual_debug=False,
                  use_color=False, image_colors=None,
@@ -112,7 +115,8 @@ class MovingMNISTGenerator:
         # Check that digit_image_id and digit_labels are compatible. If digit_image_id is
         # defined, digit_labels must have length 1.
         if digit_image_id is not None and (digit_labels is None or len(digit_labels) != 1):
-            raise ValueError('If digit_image_id is defined, digit_labels must be given and have length 1')
+            raise ValueError('If digit_image_id is defined, digit_labels must be given and '
+                             'have length 1')
 
         # Get digits and split them into image and label lists
         self.digit_image_id = digit_image_id
@@ -133,15 +137,47 @@ class MovingMNISTGenerator:
         self.video_tensor = None
         self.ran_dynamics = False
 
-        self.set_background(background_file_path)
+        # Setting background
+        # Check consistency of parameters
+        if background_file_id is not None:
+            if not use_background:
+                raise ValueError('If background_file_id is given, then use_background must be True')
+            if not background_file_cats or len(background_file_cats) != 1:
+                raise ValueError('If background_file_id is given, then background_file_cats must be'
+                                 ' given and have length 1')
+        # Set background parameters and background
+        self.use_background = use_background
+        self.background_file_dir = background_file_dir
+        self.background_file_cats = background_file_cats if background_file_cats \
+            else os.listdir(self.background_file_dir)
+        self.background_file_id = background_file_id
+        self.set_background()
 
 
-    def set_background(self, background_file_path):
+    def set_background(self):
         '''
-        Set the background image
-        :param background_file_path: The path to the background file
+        Sample and set the background image
         :return:
         '''
+
+        # Sample background image directory
+        self.__reseed_rng__()
+        bg_folder = os.path.join(self.background_file_dir, self.background_file_cats[
+            np.random.randint(len(self.background_file_cats))
+        ])
+        # Sample background from folder
+        self.__reseed_rng__()
+        background_file_path = os.path.join(bg_folder, '%04d.jpg'
+                                            % np.random.randint(len(os.listdir(bg_folder))))
+        # Override if the background ID was defined
+        if self.background_file_id:
+            background_file_path = os.path.join(bg_folder, '%04d.jpg' % self.background_file_id)
+
+        # Override background if choosing not to use one. This is needed here so all random seeds
+        # are called
+        if not self.use_background:
+            background_file_path = None
+
         video_size = self.video_size
         if not self.use_color:
             self.background = np.zeros((video_size[1], video_size[0]), dtype=np.uint8)
@@ -209,7 +245,9 @@ class MovingMNISTGenerator:
         elif message_type == 'background':
             assert(step == -1)
             assert(set_equal(meta.keys(), ['image_path']))
-            assert(meta['image_path'] is None or isinstance(meta['image_path'], UnicodeType))
+            assert(meta['image_path'] is None
+                   or isinstance(meta['image_path'], UnicodeType)
+                   or isinstance(meta['image_path'], str))
         elif message_type == 'start_state':
             assert(step == -1)
             assert(set_equal(meta.keys(), ['digit_id', 'scale', 'x', 'y', 'angle']))
