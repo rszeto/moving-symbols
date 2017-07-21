@@ -131,6 +131,7 @@ class MovingMNISTGenerator:
 
         # Set empty video cache
         self.video_tensor = None
+        self.ran_dynamics = False
 
         self.set_background(background_file_path)
 
@@ -730,20 +731,31 @@ class MovingMNISTGenerator:
         self.step_count += 1
 
 
-    def populate_video_tensor(self):
+    def get_video_tensor_copy(self):
         '''
-        Generate the video frame cache and store it as video_tensor
+        Get a copy of the video tensor
         :return:
         '''
-        if not self.video_tensor:
+        if not self.ran_dynamics:
+            raise RuntimeError('You must call run_dynamics() before obtaining a video tensor copy')
+        return self.video_tensor.copy()
+
+
+    def run_dynamics(self):
+        '''
+        Run through the dynamics for the whole time period, populating the video tensor
+        and event log
+        :return:
+        '''
+        if not self.ran_dynamics:
             # Generate frames
             frames = []
             for i in range(self.num_timesteps):
+                # Iterate digit dynamics
+                self.step()
                 # Render and store the current image
                 stitched_frame = self.render_current_state()
                 frames.append(stitched_frame)
-                # Iterate digit dynamics
-                self.step()
 
             # Convert frames to tensor
             self.video_tensor = np.stack(frames, axis=-1)
@@ -756,33 +768,5 @@ class MovingMNISTGenerator:
                 else:
                     raise RuntimeError('Video tensor has alpha channel, but not all alpha values are maximized')
 
-
-    def save_video(self, file_path):
-        '''
-        Save the frames for this generator instance to either a NumPy or video file
-        :param file_path: Path to save to. Must end in ".npy" or ".avi"
-        :return:
-        '''
-        _, ext = os.path.splitext(file_path)
-        if ext not in ['.npy', '.avi']:
-            raise ValueError('File extension must be either ".npy" or ".avi"')
-
-        # Generate frames
-        if self.video_tensor is None:
-            self.populate_video_tensor()
-
-        # Save
-        if ext == '.npy':
-            np.save(file_path, self.video_tensor)
-        else:
-            save_tensor_as_mjpg(file_path, self.video_tensor)
-
-
-    def get_video_tensor_copy(self):
-        '''
-        Get a copy of the video tensor
-        :return:
-        '''
-        if self.video_tensor is None:
-            self.populate_video_tensor()
-        return self.video_tensor.copy()
+            # Update run flag
+            self.ran_dynamics = True

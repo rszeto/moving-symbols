@@ -317,17 +317,8 @@ def create_description_from_logger(logger):
             digit.qualifiers.append(adj)
         desc.digits.append(digit)
 
-
         digit_init_state = DigitInitialState(digit)
         events = DigitEvent(digit)
-
-        # Describe initial scale
-        if state['scale'] > 1.2:
-            adj = Adjective(Adjective.BIG)
-            digit_init_state.qualifiers.append(adj)
-        elif state['scale'] < 0.8:
-            adj = Adjective(Adjective.SMALL)
-            digit_init_state.qualifiers.append(adj)
 
         # Describe scale transform
         if update_params['scale_speed'] > 0:

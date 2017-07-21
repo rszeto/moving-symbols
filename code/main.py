@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import argparse
 import time
 from text_description import create_description_from_logger
-import h5py
 
 
 def generate_video_data(index, gen_params, seed):
@@ -20,8 +19,8 @@ def generate_video_data(index, gen_params, seed):
     '''
     logger = SimpleMovingMNISTLogger()
     gen_seed = seed + index
-    # print(gen_seed)
     gen = MovingMNISTGenerator(seed=gen_seed, observers=[logger], **gen_params)
+    gen.run_dynamics()
 
     video_tensor = gen.get_video_tensor_copy()
     desc = create_description_from_logger(logger)
