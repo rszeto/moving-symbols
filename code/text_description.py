@@ -162,7 +162,7 @@ class Verb:
     GROWS = 'grows'
     SHRINKS = 'shrinks'
     STAND_STILL = 'stands still'
-    DO_NOTHING = 'does nothing'
+    DO_NOTHING = 'does nothing else'
     OVERLAPS = 'overlaps'
 
     def __init__(self, verb, direct_object=None):
@@ -259,7 +259,14 @@ def count_to_enumeration(count):
         return '%dth' % count
 
 
-def create_description_from_logger(logger):
+def create_description_from_logger(logger,
+                                   describe_location=True,
+                                   describe_init_scale_speed=True,
+                                   describe_reverse_scale_speed=True,
+                                   describe_reverse_angle_speed=True,
+                                   describe_hit_digit=True,
+                                   describe_hit_wall=True,
+                                   describe_overlap=True):
     '''
     Generate description from messages stored in the logger
     :param logger:
@@ -321,12 +328,13 @@ def create_description_from_logger(logger):
         events = DigitEvent(digit)
 
         # Describe scale transform
-        if update_params['scale_speed'] > 0:
-            adj = Adjective(Adjective.GROW)
-            digit_init_state.qualifiers.append(adj)
-        elif update_params['scale_speed'] < 0:
-            adj = Adjective(Adjective.SHRINK)
-            digit_init_state.qualifiers.append(adj)
+        if describe_init_scale_speed:
+            if update_params['scale_speed'] > 0:
+                adj = Adjective(Adjective.GROW)
+                digit_init_state.qualifiers.append(adj)
+            elif update_params['scale_speed'] < 0:
+                adj = Adjective(Adjective.SHRINK)
+                digit_init_state.qualifiers.append(adj)
 
         # Describe flashing
         if settings['blink_rate'] > 1:
@@ -366,9 +374,10 @@ def create_description_from_logger(logger):
                 digit_init_state.qualifiers.append(adj)
 
         # Describe starting location
-        video_size = settings['video_size']
-        location = grid_pos_to_location(state['x'], state['y'], video_size)
-        digit_init_state.location = location
+        if describe_location:
+            video_size = settings['video_size']
+            location = grid_pos_to_location(state['x'], state['y'], video_size)
+            digit_init_state.location = location
 
         # If no translation or rotation occurs, describe as standing still
         if x_speed == 0 and y_speed == 0 and angle_speed == 0:
@@ -384,23 +393,23 @@ def create_description_from_logger(logger):
     overlap_step_map = {}
     for message in nonstart_messages:
         message_type, meta, step = message['type'], message['meta'], message['step']
-        if message_type == 'reverse_scale_speed':
+        if message_type == 'reverse_scale_speed' and describe_reverse_scale_speed:
             digit_id = meta['digit_id']
             verb = Verb(Verb.SHRINKS if meta['new_direction'] < 0 else Verb.GROWS)
             desc.events[digit_id].actions.append(verb)
-        elif message_type == 'reverse_angle_speed':
+        elif message_type == 'reverse_angle_speed' and describe_reverse_angle_speed:
             digit_id = meta['digit_id']
             verb = Verb(Verb.ROTATE)
             verb.adverbs.append(Adverb.CW if meta['new_direction'] > 0 else Adverb.CCW)
             desc.events[digit_id].actions.append(verb)
-        elif message_type == 'bounce_off_digit':
+        elif message_type == 'bounce_off_digit' and describe_hit_digit:
             # TODO: Also describe reverse interaction?
             digit_id = meta['digit_id_a']
             other_digit_id = meta['digit_id_b']
             verb = Verb(Verb.HIT)
             verb.direct_object = desc.digits[other_digit_id]
             desc.events[digit_id].actions.append(verb)
-        elif message_type == 'bounce_off_wall':
+        elif message_type == 'bounce_off_wall' and describe_hit_wall:
             digit_id = meta['digit_id']
             wall_label = meta['wall_label']
             verb = Verb(Verb.HIT)
@@ -414,7 +423,7 @@ def create_description_from_logger(logger):
                 wall_entity = Wall(Wall.WEST)
             verb.direct_object = wall_entity
             desc.events[digit_id].actions.append(verb)
-        elif message_type == 'overlap':
+        elif message_type == 'overlap' and describe_overlap:
             id_a = meta['digit_id_a']
             id_b = meta['digit_id_b']
             last_overlap_step = overlap_step_map.get((id_a, id_b), None)

@@ -10,7 +10,7 @@ import time
 from text_description import create_description_from_logger
 
 
-def generate_video_data(index, gen_params, seed):
+def generate_video_data(index, gen_params, seed, verbosity_params):
     '''
     Generate a video tensor with the given parameters.
     :param index: Which job this is
@@ -23,12 +23,13 @@ def generate_video_data(index, gen_params, seed):
     gen.run_dynamics()
 
     video_tensor = gen.get_video_tensor_copy()
-    desc = create_description_from_logger(logger)
+    desc = create_description_from_logger(logger, **verbosity_params)
     text_desc = str(desc)
     return video_tensor, logger.messages, text_desc
 
 
-def main(param_file_paths, stratum_sizes, save_prefix, num_procs, seed):
+def main(param_file_paths, stratum_sizes, save_prefix, verbosity_params_path,
+         num_procs, seed):
     if len(param_file_paths) != len(stratum_sizes):
         print('Number of param file paths must equal number of stratum sizes')
         return
@@ -40,6 +41,12 @@ def main(param_file_paths, stratum_sizes, save_prefix, num_procs, seed):
     messages_list = []
     text_descs_list = []
 
+    # Load verbosity settings
+    verbosity_params = {}
+    if verbosity_params_path:
+        with open(verbosity_params_path, 'r') as f:
+            verbosity_params = json.load(f)
+
     for i in range(num_strata):
         param_file_path = param_file_paths[i]
         num_videos = stratum_sizes[i]
@@ -48,7 +55,8 @@ def main(param_file_paths, stratum_sizes, save_prefix, num_procs, seed):
         with open(param_file_path, 'r') as f:
             gen_params = json.load(f)
         # Generate video frames with a multiprocessing pool
-        fn = partial(generate_video_data, gen_params=gen_params, seed=seed)
+        fn = partial(generate_video_data, gen_params=gen_params, seed=seed,
+                     verbosity_params=verbosity_params)
         data = pool.map(fn, range(num_videos))
         # data = map(fn, range(num_videos))
         cur_video_tensors_list, cur_messages_list, cur_text_descs_list = zip(*data)
@@ -86,6 +94,8 @@ if __name__ == '__main__':
                         help='How many videos to generate for each stratum')
     parser.add_argument('--save_prefix', type=str, required=True,
                         help='The path prefix for the saved files')
+    parser.add_argument('--verbosity_params_path', type=str,
+                        help='Path to the verbosity settings to pass to the description generator')
     parser.add_argument('--num_procs', type=int, default=1, help='How many processors to use')
     parser.add_argument('--seed', type=int, default=int(time.time()), help='Seed for RNG')
 
