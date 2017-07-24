@@ -170,7 +170,7 @@ class MovingMNISTGenerator:
         background_file_path = os.path.join(bg_folder, '%04d.jpg'
                                             % np.random.randint(len(os.listdir(bg_folder))))
         # Override if the background ID was defined
-        if self.background_file_id:
+        if self.background_file_id is not None:
             background_file_path = os.path.join(bg_folder, '%04d.jpg' % self.background_file_id)
 
         # Override background if choosing not to use one. This is needed here so all random seeds
@@ -183,19 +183,19 @@ class MovingMNISTGenerator:
             self.background = np.zeros((video_size[1], video_size[0]), dtype=np.uint8)
             if background_file_path:
                 bg = imread(background_file_path)
+                bg = cv2.resize(bg, video_size, interpolation=cv2.INTER_LANCZOS4)
                 if bg.ndim != 2:
                     bg = cv2.cvtColor(bg, cv2.COLOR_RGB2GRAY)
-                self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])] = \
-                    bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0])]
+                self.background[...] = bg/2
         else:
             self.background = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
             self.background[:, :, 3] = 255
             if background_file_path:
                 bg = imread(background_file_path)
+                bg = cv2.resize(bg, video_size, interpolation=cv2.INTER_LANCZOS4)
                 if bg.ndim != 3:
                     bg = cv2.cvtColor(bg, cv2.COLOR_GRAY2RGB)
-                self.background[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3] = \
-                    bg[:min(bg.shape[0], video_size[1]), :min(bg.shape[1], video_size[0]), :3]
+                self.background[:, :, :3] = bg/2
 
         # Publish background message
         message = dict(
