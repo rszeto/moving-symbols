@@ -29,13 +29,14 @@ def generate_video_data(index, gen_params, seed, verbosity_params):
 
 
 def main(param_file_paths, stratum_sizes, save_prefix, verbosity_params_path,
-         num_procs, seed):
+         num_procs, seed, pool=None):
     if len(param_file_paths) != len(stratum_sizes):
         print('Number of param file paths must equal number of stratum sizes')
         return
 
     num_strata = len(param_file_paths)
-    pool = Pool(processes=num_procs)
+    if pool is None:
+        pool = Pool(processes=num_procs)
 
     video_tensors_list = []
     messages_list = []

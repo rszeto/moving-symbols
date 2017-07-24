@@ -44,7 +44,7 @@ class MovingMNISTGenerator:
                  num_images=1, max_image_size=28, video_size=(64, 64), num_timesteps=30,
                  x_lim=None, y_lim=None,
                  x_init_lim=None, y_init_lim=None,
-                 angle_lim=[0, 0], scale_lim=[1, 1],
+                 angle_lim=None, scale_lim=[1, 1],
                  x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0],
                  use_background=False,
                  background_file_dir=os.path.abspath(os.path.join(__SCRIPT_DIR__, '..', 'backgrounds')),
@@ -379,7 +379,9 @@ class MovingMNISTGenerator:
         # Choose angle. Start by choosing position in range as percentile
         self.__reseed_rng__()
         angle_percent = np.random.uniform()
-        if self.angle_lim[0] <= self.angle_lim[1]:
+        if self.angle_lim is None:
+            angle_start = int(np.round(angle_percent * 359))
+        elif self.angle_lim[0] <= self.angle_lim[1]:
             # Choose point in range
             angle_diff = self.angle_lim[1] - self.angle_lim[0]
             angle_start = self.angle_lim[0] + angle_percent * angle_diff
