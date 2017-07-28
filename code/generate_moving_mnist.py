@@ -45,6 +45,7 @@ class MovingMNISTGenerator:
                  x_lim=None, y_lim=None,
                  x_init_lim=None, y_init_lim=None,
                  angle_lim=None, scale_lim=[1, 1],
+                 angle_init_lim=None, scale_init_lim=None,
                  x_speed_lim=[0, 0], y_speed_lim=[0, 0], scale_speed_lim=[0, 0], angle_speed_lim=[0, 0],
                  use_background=False,
                  background_file_dir=os.path.abspath(os.path.join(__SCRIPT_DIR__, '..', 'backgrounds')),
@@ -78,7 +79,10 @@ class MovingMNISTGenerator:
         self.video_size = tuple(video_size)
         self.num_timesteps = num_timesteps
         self.angle_lim = None if angle_lim is None else [x % 360 for x in angle_lim]
+        self.angle_init_lim = self.angle_lim if angle_init_lim is None \
+            else [x % 360 for x in angle_init_lim]
         self.scale_lim = scale_lim
+        self.scale_init_lim = self.scale_lim if scale_init_lim is None else scale_init_lim
         self.x_speed_lim = x_speed_lim
         self.y_speed_lim = y_speed_lim
         self.scale_speed_lim = scale_speed_lim
@@ -375,22 +379,22 @@ class MovingMNISTGenerator:
         '''
         # Choose scale
         self.__reseed_rng__()
-        scale_start = np.random.uniform(self.scale_lim[0], self.scale_lim[1])
+        scale_start = np.random.uniform(self.scale_init_lim[0], self.scale_init_lim[1])
         # Choose angle. Start by choosing position in range as percentile
         self.__reseed_rng__()
         angle_percent = np.random.uniform()
-        if self.angle_lim is None:
+        if self.angle_init_lim is None:
             angle_start = int(np.round(angle_percent * 359))
-        elif self.angle_lim[0] <= self.angle_lim[1]:
+        elif self.angle_init_lim[0] <= self.angle_init_lim[1]:
             # Choose point in range
-            angle_diff = self.angle_lim[1] - self.angle_lim[0]
-            angle_start = self.angle_lim[0] + angle_percent * angle_diff
+            angle_diff = self.angle_init_lim[1] - self.angle_init_lim[0]
+            angle_start = self.angle_init_lim[0] + angle_percent * angle_diff
             # Discretize
             angle_start = int(np.round(angle_start))
         else:
             # Going CCW ends up at smaller angle
-            angle_diff = self.angle_lim[1] + (360 - self.angle_lim[0])
-            angle_start = self.angle_lim[0] + angle_percent * angle_diff
+            angle_diff = self.angle_init_lim[1] + (360 - self.angle_init_lim[0])
+            angle_start = self.angle_init_lim[0] + angle_percent * angle_diff
             # Discretize and place within [0, 360)
             angle_start = int(np.round(angle_start)) % 360
         # Start far from the video frame border to avoid image clipping

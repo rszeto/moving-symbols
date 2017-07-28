@@ -58,8 +58,8 @@ def main(param_file_paths, stratum_sizes, save_prefix, verbosity_params_path,
         # Generate video frames with a multiprocessing pool
         fn = partial(generate_video_data, gen_params=gen_params, seed=seed,
                      verbosity_params=verbosity_params)
-        data = pool.map(fn, range(num_videos))
-        # data = map(fn, range(num_videos))
+        # data = pool.map(fn, range(num_videos))
+        data = map(fn, range(num_videos))
         cur_video_tensors_list, cur_messages_list, cur_text_descs_list = zip(*data)
         # Convert from tuples to actual lists
         video_tensors_list += list(cur_video_tensors_list)
