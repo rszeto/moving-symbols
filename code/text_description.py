@@ -77,14 +77,14 @@ class DigitEvent:
 class Location:
 
     CENTER = 'center region'
-    NORTH = 'north region'
-    NW = 'northwest region'
-    WEST = 'west region'
-    SW = 'southwest region'
-    SOUTH = 'south region'
-    SE = 'southeast region'
-    EAST = 'east region'
-    NE = 'northeast region'
+    NORTH = 'N region'
+    NW = 'NW region'
+    WEST = 'W region'
+    SW = 'SW region'
+    SOUTH = 'S region'
+    SE = 'SE region'
+    EAST = 'E region'
+    NE = 'NE region'
 
     __metaclass__ = ABCMeta
 
@@ -133,10 +133,10 @@ class Digit(Entity):
 
 
 class Wall(Entity):
-    NORTH = 'north wall'
-    SOUTH = 'south wall'
-    EAST = 'east wall'
-    WEST = 'west wall'
+    NORTH = 'N wall'
+    SOUTH = 'S wall'
+    EAST = 'E wall'
+    WEST = 'W wall'
 
     def __init__(self, direction):
         self.direction = direction
@@ -189,17 +189,17 @@ class Verb:
 
 
 class Adverb:
-    CW = 'clockwise'
-    CCW = 'counterclockwise'
+    CW = 'CW'
+    CCW = 'CCW'
 
-    NORTH = 'north'
-    NW = 'northwest'
-    WEST = 'west'
-    SW = 'southwest'
-    SOUTH = 'south'
-    SE = 'southeast'
-    EAST = 'east'
-    NE = 'northeast'
+    NORTH = 'N'
+    NW = 'NW'
+    WEST = 'W'
+    SW = 'SW'
+    SOUTH = 'S'
+    SE = 'SE'
+    EAST = 'E'
+    NE = 'NE'
 
     __metaclass__ = ABCMeta
 

@@ -384,7 +384,8 @@ class MovingMNISTGenerator:
         '''
         # Choose scale
         self.__reseed_rng__()
-        scale_start = np.random.uniform(self.scale_init_lim[0], self.scale_init_lim[1])
+        scale_percent = np.random.uniform()
+        scale_start = self.scale_init_lim[0] + scale_percent * (self.scale_init_lim[1] - self.scale_init_lim[0])
         # Choose angle. Start by choosing position in range as percentile
         self.__reseed_rng__()
         angle_percent = np.random.uniform()
