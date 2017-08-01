@@ -56,7 +56,7 @@ class MovingMNISTGenerator:
                  use_color=False, image_colors=None,
                  digit_labels=None,
                  digit_image_id=None,
-                 blink_rate=0):
+                 blink_rates=None):
 
         # Store copy of initial settings
         settings = locals().copy()
@@ -89,7 +89,12 @@ class MovingMNISTGenerator:
         self.angle_speed_lim = angle_speed_lim
         self.enable_image_interaction = enable_image_interaction
         self.visual_debug = visual_debug
-        self.blink_rate = blink_rate
+
+        # Validate blink rates
+        if blink_rates is not None:
+            for i in blink_rates:
+                assert(i >= 0 and i != 1)
+        self.blink_rates = blink_rates
 
         self.x_lim = [0, video_size[0]] if x_lim is None else x_lim
         self.y_lim = [0, video_size[1]] if y_lim is None else y_lim
@@ -190,7 +195,7 @@ class MovingMNISTGenerator:
                 bg = cv2.resize(bg, video_size, interpolation=cv2.INTER_LANCZOS4)
                 if bg.ndim != 2:
                     bg = cv2.cvtColor(bg, cv2.COLOR_RGB2GRAY)
-                self.background[...] = bg/2
+                self.background[...] = np.array(bg * 0.8, dtype=np.uint8)
         else:
             self.background = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
             self.background[:, :, 3] = 255
@@ -199,7 +204,7 @@ class MovingMNISTGenerator:
                 bg = cv2.resize(bg, video_size, interpolation=cv2.INTER_LANCZOS4)
                 if bg.ndim != 3:
                     bg = cv2.cvtColor(bg, cv2.COLOR_GRAY2RGB)
-                self.background[:, :, :3] = bg/2
+                self.background[:, :, :3] = np.array(bg * 0.8, dtype=np.uint8)
 
         # Publish background message
         message = dict(
@@ -480,14 +485,14 @@ class MovingMNISTGenerator:
         # Overlay frames
         stitched_frame = self.background
         # Draw digits if this is not a blink frame
-        if self.blink_rate <= 1 or (self.blink_rate > 1 and (
-                        (self.step_count + 1) % self.blink_rate != 0)):
-            for j in range(self.num_images):
+        for j in range(self.num_images):
+            if self.blink_rates is None or self.blink_rates[j] == 0 or (self.step_count+1) % self.blink_rates[j] != 0:
                 stitched_frame = overlay_image(digit_frames[j], stitched_frame)
 
-            # Draw bounding boxes
-            if self.visual_debug:
-                for j in range(self.num_images):
+        # Draw bounding boxes
+        if self.visual_debug:
+            for j in range(self.num_images):
+                if self.blink_rates is None or (self.step_count + 1) % self.blink_rates[j] != 0:
                     a = (int(self.bounding_boxes[j][0][0]), int(self.bounding_boxes[j][0][1]))
                     b = (int(self.bounding_boxes[j][1][0]), int(self.bounding_boxes[j][1][1]))
                     if self.use_color:
