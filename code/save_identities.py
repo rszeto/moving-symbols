@@ -11,15 +11,32 @@ def main(desc_path):
     digit_classes = []
     for video_message in json_messages:
         digit_messages = filter(lambda x: x['type'] == 'digit', video_message)
-        if len(digit_messages) != 1:
-            print('Number of digits in %s is not one, skipping' % desc_path)
-            return
-        digit_image = imread(digit_messages[0]['meta']['image_path'])
-        # Pad the image to make it 64x64
-        digit_image_padded = cv2.copyMakeBorder(digit_image, 18, 18, 18, 18, cv2.BORDER_CONSTANT, value=0)
-        digit_class = digit_messages[0]['meta']['label']
-        images.append(digit_image_padded)
-        digit_classes.append(digit_class)
+        digit_messages = sorted(digit_messages, key=lambda x: x['meta']['id'])
+        if len(digit_messages) > 1 and len(digit_messages) < 5:
+            image = np.zeros((64, 64), dtype=np.uint8)
+            cur_digit_classes = []
+            for i in range(len(digit_messages)):
+                digit_image = imread(digit_messages[i]['meta']['image_path'])
+                if i == 0:
+                    x_offset, y_offset = 0, 0
+                elif i == 1:
+                    x_offset, y_offset = 36, 0
+                elif i == 2:
+                    x_offset, y_offset = 0, 36
+                elif i == 3:
+                    x_offset, y_offset = 36, 36
+                image[y_offset:y_offset+digit_image.shape[0], x_offset:x_offset+digit_image.shape[1]] = digit_image
+                digit_class = digit_messages[i]['meta']['label']
+                cur_digit_classes.append(digit_class)
+            digit_classes.append(cur_digit_classes)
+        else:
+            # Put image in center
+            digit_image = imread(digit_messages[0]['meta']['image_path'])
+            # Pad the image to make it 64x64
+            image = cv2.copyMakeBorder(digit_image, 18, 18, 18, 18, cv2.BORDER_CONSTANT, value=0)
+            digit_class = digit_messages[0]['meta']['label']
+            digit_classes.append(digit_class)
+        images.append(image)
     images = np.stack(images, axis=0)
     digit_classes = np.array(digit_classes, dtype=np.uint8)
     out_path = desc_path.replace('_messages.npy', '_identities')
