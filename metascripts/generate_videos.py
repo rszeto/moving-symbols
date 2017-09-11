@@ -56,6 +56,10 @@ extension_dicts = OrderedDict([
         "x_speed_lim": [-3, 3],
         "y_speed_lim": [-3, 3]
     }),
+    ('translation=on_fast', {
+        "x_speed_lim": [4, 7],
+        "y_speed_lim": [4, 7]
+    }),
     ('rotation=limit_a', {
         "angle_lim": [-45, 45],
         "angle_init_lim": [0, 0],
@@ -74,6 +78,10 @@ extension_dicts = OrderedDict([
         "-angle_lim": None,
         "angle_speed_lim": [-4, 0]
     }),
+    ('rotation=cw_fast', {
+        "-angle_lim": None,
+        "angle_speed_lim": [-10, -6]
+    }),
     ('rotation=ccw', {
         "-angle_lim": None,
         "angle_speed_lim": [0, 4]
@@ -87,6 +95,11 @@ extension_dicts = OrderedDict([
         "scale_lim": [0.75, 1.25],
         "scale_init_lim": [1.0, 1.0],
         "scale_speed_lim": [-0.05, 0.05]
+    }),
+    ('scale=limit_a_fast', {
+        "scale_lim": [0.5, 1],
+        "scale_init_lim": [0.75, 0.75],
+        "scale_speed_lim": [0.075, 0.135]
     }),
     ('flashing=sync_a', {
         "blink_rates": [2, 2, 2]
@@ -115,23 +128,23 @@ extension_dicts = OrderedDict([
     ('image=any', {
         "-digit_labels": None
     }),
-    ('background=single', {
-        "use_background": True,
-        "background_file_cats": ["c_crosswalk"],
-        "background_file_id": 0
-    }),
-    ('background=subset_a', {
-        "use_background": True,
-        "background_file_cats": ["c_crosswalk"]
-    }),
-    ('background=subset_b', {
-        "use_background": True,
-        "background_file_cats": ["r_rainforest"]
-    }),
-    ('background=any', {
-        "use_background": True,
-        "background_file_cats": ["c_crosswalk", "r_rainforest"]
-    })
+    # ('background=single', {
+    #     "use_background": True,
+    #     "background_file_cats": ["c_crosswalk"],
+    #     "background_file_id": 0
+    # }),
+    # ('background=subset_a', {
+    #     "use_background": True,
+    #     "background_file_cats": ["c_crosswalk"]
+    # }),
+    # ('background=subset_b', {
+    #     "use_background": True,
+    #     "background_file_cats": ["r_rainforest"]
+    # }),
+    # ('background=any', {
+    #     "use_background": True,
+    #     "background_file_cats": ["c_crosswalk", "r_rainforest"]
+    # })
 ])
 
 dynamic_params = ['translation', 'rotation', 'scale', 'flashing']
@@ -211,25 +224,40 @@ def generate_videos(exp_names,
                     num_long_videos,
                     verbosity_params_path=os.path.join(
                         SCRIPT_DIR, '..', 'verbosity_params', 'verbosity_short.json'),
-                    num_procs=10):
-    pool = Pool(num_procs)
+                    num_procs=None,
+                    generate_overlap=False):
+    pool = Pool(num_procs) if num_procs is not None else Pool()
     for exp_name in exp_names:
         # Generate videos
-        print(exp_name)
         json_path = os.path.join(PARAMS_ROOT, '%s.json' % exp_name)
         # Train set
         train_save_prefix = os.path.join('..', 'output', exp_name)
         main.main([json_path], [num_train_videos], train_save_prefix, verbosity_params_path, num_procs, 0, pool=pool)
+        if generate_overlap and 'num_digits=2' in exp_name:
+            train_save_prefix = os.path.join('..', 'output', '%s+occlusion=on' % exp_name)
+            main.main([json_path], [num_train_videos], train_save_prefix, verbosity_params_path, num_procs, 0, pool=pool, keep_overlap_only=True)
+
         # Validation set
         val_save_prefix = os.path.join('..', 'output', '%s_val' % exp_name)
         main.main([json_path], [num_val_videos], val_save_prefix, verbosity_params_path, num_procs, 10, pool=pool)
-        Test set
+        if generate_overlap and 'num_digits=2' in exp_name:
+            val_save_prefix = os.path.join('..', 'output', '%s+occlusion=on_val' % exp_name)
+            main.main([json_path], [num_val_videos], val_save_prefix, verbosity_params_path, num_procs, 10, pool=pool, keep_overlap_only=True)
+
+        # Test set
         test_save_prefix = os.path.join('..', 'output', '%s_test' % exp_name)
         main.main([json_path], [num_test_videos], test_save_prefix, verbosity_params_path, num_procs, 20, pool=pool)
+        if generate_overlap and 'num_digits=2' in exp_name:
+            test_save_prefix = os.path.join('..', 'output', '%s+occlusion=on_test' % exp_name)
+            main.main([json_path], [num_test_videos], test_save_prefix, verbosity_params_path, num_procs, 20, pool=pool, keep_overlap_only=True)
+
         # Long videos
         json_path = os.path.join(PARAMS_ROOT, '%s_long.json' % exp_name)
         long_save_prefix = os.path.join('..', 'output', '%s_long' % exp_name)
         main.main([json_path], [num_long_videos], long_save_prefix, verbosity_params_path, num_procs, 20, pool=pool)
+        if generate_overlap and 'num_digits=2' in exp_name:
+            long_save_prefix = os.path.join('..', 'output', '%s+occlusion=on_long' % exp_name)
+            main.main([json_path], [num_long_videos], long_save_prefix, verbosity_params_path, num_procs, 20, pool=pool, keep_overlap_only=True)
 
 
 if __name__ == '__main__':
@@ -247,4 +275,4 @@ if __name__ == '__main__':
     exp_names = filter(lambda x: len(x) > 0 and not x.startswith('#'), exp_names)
 
     print('Generating videos')
-    generate_videos(exp_names, 10000, 1000, 1000, 200, num_procs=23)
+    generate_videos(exp_names, 10000, 1000, 1000, 200, generate_overlap=True)

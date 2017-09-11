@@ -273,6 +273,22 @@ class MovingMNISTGenerator:
                     assert (isinstance(value, float))
                 else:
                     assert (isinstance(value, int))
+        elif message_type == 'state':
+            assert (step > -1)
+            assert (set_equal(meta.keys(), ['digit_id', 'scale', 'x', 'y', 'angle']))
+            for key, value in meta.iteritems():
+                if key == 'scale':
+                    assert (isinstance(value, float))
+                else:
+                    assert (isinstance(value, int))
+        elif message_type == 'update_params':
+            assert (step > -1)
+            assert (set_equal(meta.keys(), ['digit_id', 'scale_speed', 'x_speed', 'y_speed', 'angle_speed']))
+            for key, value in meta.iteritems():
+                if key == 'scale_speed':
+                    assert (isinstance(value, float))
+                else:
+                    assert (isinstance(value, int))
         elif message_type == 'reverse_scale_speed':
             assert(step > -1)
             assert(set_equal(meta.keys(), ['digit_id', 'new_direction']))
@@ -776,6 +792,20 @@ class MovingMNISTGenerator:
                 update_params['y_speed'] *= -1
 
             self.bounding_boxes[j] = [(x_left, y_top), (x_right, y_bottom)]
+
+            # Publish the current state and update parameters
+            message = dict(
+                type='state',
+                step=self.step_count,
+                meta=image_state.copy()
+            )
+            self.publish_message(message)
+            message = dict(
+                type='update_params',
+                step=self.step_count,
+                meta=update_params.copy()
+            )
+            self.publish_message(message)
 
         # Increment step
         self.step_count += 1

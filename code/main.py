@@ -28,11 +28,20 @@ def generate_video_data(index, gen_params, seed, verbosity_params):
     return video_tensor, logger.messages, text_desc
 
 
+def data_contains_overlap(data_tuple, overlap_in=[7, 9]):
+    messages = data_tuple[1]
+    overlap_messages = filter(lambda x: x['type'] == 'overlap', messages)
+    overlap_times = set(map(lambda x: x['step'], overlap_messages))
+    return True if overlap_times & set(overlap_in) else False
+
+
 def main(param_file_paths, stratum_sizes, save_prefix, verbosity_params_path,
-         num_procs, seed, pool=None):
+         num_procs, seed, keep_overlap_only=False, pool=None):
     if len(param_file_paths) != len(stratum_sizes):
         print('Number of param file paths must equal number of stratum sizes')
         return
+
+    print('Generating %s' % save_prefix)
 
     num_strata = len(param_file_paths)
     if pool is None:
@@ -50,17 +59,27 @@ def main(param_file_paths, stratum_sizes, save_prefix, verbosity_params_path,
 
     for i in range(num_strata):
         param_file_path = param_file_paths[i]
-        num_videos = stratum_sizes[i]
+        num_total_videos = stratum_sizes[i]
+        # Keep track of how many videos have been generated so far for seeding
+        num_generated_videos = 0
 
         # Load the generation parameters
         with open(param_file_path, 'r') as f:
             gen_params = json.load(f)
         # Generate video frames with a multiprocessing pool
-        fn = partial(generate_video_data, gen_params=gen_params, seed=seed,
-                     verbosity_params=verbosity_params)
-        data = pool.map(fn, range(num_videos))
-        # data = map(fn, range(num_videos))
-        cur_video_tensors_list, cur_messages_list, cur_text_descs_list = zip(*data)
+        all_data = []
+        while len(all_data) < num_total_videos:
+            fn = partial(generate_video_data, gen_params=gen_params, seed=seed+num_generated_videos,
+                         verbosity_params=verbosity_params)
+            data = pool.map(fn, range(num_total_videos - len(all_data)))
+            # data = map(fn, range(num_total_videos - len(all_data)))
+            if keep_overlap_only:
+                data = filter(data_contains_overlap, data)
+            all_data += data
+            num_generated_videos += num_total_videos
+            print('Keeping %d videos' % len(all_data))
+        data_contains_overlap(all_data[0])
+        cur_video_tensors_list, cur_messages_list, cur_text_descs_list = zip(*all_data[:num_total_videos])
         # Convert from tuples to actual lists
         video_tensors_list += list(cur_video_tensors_list)
         messages_list += list(cur_messages_list)
@@ -99,6 +118,7 @@ if __name__ == '__main__':
                         help='Path to the verbosity settings to pass to the description generator')
     parser.add_argument('--num_procs', type=int, default=1, help='How many processors to use')
     parser.add_argument('--seed', type=int, default=int(time.time()), help='Seed for RNG')
+    parser.add_argument('--keep_overlap_only', action='store_true', help='Whether to only keep examples where digits overlap')
 
     args = parser.parse_args()
     main(**vars(args))
