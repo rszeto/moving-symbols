@@ -56,3 +56,13 @@ A sampling parameter configuration is defined with a JSON file whose keys match 
 | `digit_labels`               | list (int)        | The digit classes that can be sampled from when generating videos. The values in the list must be between 0 and 9, inclusive.                                                                                                                                           |
 | `digit_image_id`             | int               | The index of the digit image. If specified, `digit_labels` must be specified and have length 1.                                                                                                                                                                         |
 | `blink_rates`                | list (int)        | The flashing rate of the digits. If specified, it must have length equal to `num_images`, and all values in the list must be either 0 or a number greater than 1.                                                                                                       |
+
+### Running `code/main.py`
+
+The following is a more detailed description of the arguments in `code/main.py`. The `param_file_paths` specifies a list of sampling parameter configurations with which to generate videos. `stratum_sizes` specifies a list a numbers `[x1, x2, ...]` such that `x1` videos are sampled with the first sampling parameter configuration, `x2` videos are sampled with the second, and so on. Each of these sets can be thought of as a "stratum".
+
+`save_prefix` specifies a string identifier for the dataset, and is used to determine what to name the NumPy array files; for instance, if `save_prefix` is X, videos are saved to `X_videos.npy`, messages are saved to `X_messages.npy`, and text descriptions are saved to `X_text_descs.npy`.
+
+`verbosity_params_path` specifies a JSON file whose keys correspond to events that can be described, and whose values correspond to whether to describe those events in text. Possible key values are `describe_location`, `describe_init_scale_speed`, `describe_reverse_scale_speed`, `describe_reverse_angle_speed`, `describe_hit_digit`, `describe_hit_wall`, `describe_overlap`. These values are used in the `create_description_from_logger` function in `code/text_description.py`.
+
+`num_procs` specifies how many workers to use to generate the dataset. By default, it will use all the available cores. `seed` is used to seed all random number generators; by default, it is based on the current timestamp. `keep_overlap_only` specified whether to solely generate videos where digits are overlapping.
