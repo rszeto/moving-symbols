@@ -45,7 +45,7 @@ def main(param_file_paths, stratum_sizes, save_prefix, verbosity_params_path,
 
     num_strata = len(param_file_paths)
     if pool is None:
-        pool = Pool(processes=num_procs)
+        pool = Pool(num_procs) if num_procs is not None else Pool()
 
     video_tensors_list = []
     messages_list = []
@@ -116,7 +116,7 @@ if __name__ == '__main__':
                         help='The path prefix for the saved files')
     parser.add_argument('--verbosity_params_path', type=str,
                         help='Path to the verbosity settings to pass to the description generator')
-    parser.add_argument('--num_procs', type=int, default=1, help='How many processors to use')
+    parser.add_argument('--num_procs', type=int, default=None, help='How many processors to use')
     parser.add_argument('--seed', type=int, default=int(time.time()), help='Seed for RNG')
     parser.add_argument('--keep_overlap_only', action='store_true', help='Whether to only keep examples where digits overlap')
 
