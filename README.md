@@ -19,7 +19,7 @@ cd data
 python download_backgrounds.py
 ```
 
-## Preparing a dataset
+## Preparing a single dataset
 
 For generating a single dataset, the entry point is `code/main.py`. It takes arguments that specify the paths to JSON files that specify a sampling parameter configuration, how many videos to sample with each configuration, and under which name to save videos, messages, and text descriptions.
 
@@ -66,3 +66,43 @@ The following is a more detailed description of the arguments in `code/main.py`.
 `verbosity_params_path` specifies a JSON file whose keys correspond to events that can be described, and whose values correspond to whether to describe those events in text. Possible key values are `describe_location`, `describe_init_scale_speed`, `describe_reverse_scale_speed`, `describe_reverse_angle_speed`, `describe_hit_digit`, `describe_hit_wall`, `describe_overlap`. These values are used in the `create_description_from_logger` function in `code/text_description.py`.
 
 `num_procs` specifies how many workers to use to generate the dataset. By default, it will use all the available cores. `seed` is used to seed all random number generators; by default, it is based on the current timestamp. `keep_overlap_only` specified whether to solely generate videos where digits are overlapping.
+
+### Generated files
+
+`code/main.py` generates three files: a video file, a messages file, and a textual description file. The video file stores a NumPy array with dimensions `(num_timesteps, num_videos, height, width)` for grayscale videos and `(num_timesteps, num_videos, height, width, num_channels)` for color videos. This unusual arrangement of dimensions matches the original Moving MNIST test set.
+
+The textual description file stores a NumPy array of N strings, where N is the number of videos. This dimension is aligned with the video index dimension of the video file. Each string is a procedurally-generated description of what happened in the video. The procedure for generating descriptions can be found in `code/text_description.py`.
+
+The messages file stores a NumPy array of N JSON strings, where N is the number of videos. This dimension is aligned with the video index dimension of the video file. Each JSON string encodes an array of message JSON strings; the message JSON strings encode a message defined as a dictionary with keys `step`, `type`, and `meta`. `step` corresponds to the time step of an event: for overall video properties like background path, digit image source, etc., the time step is -1, and for events occurring within the video like current state/velocities, overlap, and bouncing, the time step is a nonnegative integer. `type` indicates what the event is describing (see table below), and `meta` contains metadata related to the event being described.
+
+| Type                    | Description                                    | Meta keys                                                                                                    |
+| ----------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `settings`              | The sampling parameter configuration           | The keyword arguments in the constructor of `MovingMNISTGenerator`                                           |
+| `background`            | The path to the background image in this video | `image_path`                                                                                                 |
+| `digit`                 | Information about a digit in the video         | `label` (digit class), `image_path`, `id` (distinguishes the digits in the video)                            |
+| `digit_color`           | The color of a digit                           | `digit_id`, `color`                                                                                          |
+| `start_state`           | The initial state of a digit                   | `digit_id`, `scale`, `x`, `y`, `angle`                                                                       |
+| `start_update_params`   | The initial velocities of a digit              | `digit_id`, `scale_speed`, `x_speed`, `y_speed`, `angle_speed`                                               |
+| `reverse_scale_speed`   | A digit reversed its scaling velocity          | `digit_id`, `new_direction` (-1 if the digit is now shrinking, 1 if it's growing)                            |
+| `reverse_angle_speed`   | A digit reversed its rotation velocity         | `digit_id`, `new_direction` (-1 if the digit is now turning clockwise, 1 if it's turning counterclockwise)   |
+| `bounce_off_digit`      | A digit bounced off another                    | `digit_id_a`, `digit_id_b` (the two digits that bounced)                                                     |
+| `overlap`               | A digit overlaps another                       | `digit_id_a` (the ID of the overlapping digit), `digit_id_b` (the ID of the digit being overlapped)          |
+| `bounce_off_wall`       | A digit bounced off a wall                     | `digit_id`, `wall_label` ('north', 'south', 'east', or 'west')                                               |
+| `state`                 | The current state of a digit                   | `digit_id`, `scale`, `x`, `y`, `angle`                                                                       |
+| `update_params`         | The current velocities of a digit              | `digit_id`, `scale_speed`, `x_speed`, `y_speed`, `angle_speed`                                               |
+
+
+## Preparing many datasets
+
+There is a metascript that calls the main function in `code/main.py` over a set of pre-defined sampling parameter configurations. This script generates the JSON files corresponding to about 30k combinations of different modes, where each mode controls one type of dynamics (e.g. rotation, translation) or one aspect of video content (e.g. digit classes, number of digits). 
+
+Additionally, the metascript generates the datasets for the sampling configurations listed in `metascripts/mnist_slices.txt`, where you list the names of each sampling configuration, one per line. A sampling configuration name is constructed by concatenating the names of individual settings with `+`. For example, to enable translation (`translation=on`), unbounded rotation (`rotation=no_limit`), and two digits (`num_digits=2`), you would have a line that reads `translation=on+rotation=no_limit+num_digits=2`. You cannot combine two settings with the same name on the left-hand side of the equals sign. The order of the individual settings must follow the order they are specified in `extension_dicts`, which currently is:
+
+1. `translation=X`
+2. `rotation=X`
+3. `scale=X`
+4. `flashing=X`
+5. `num_digits=X`
+6. `image=X`
+
+The metascript ignores any line that is empty or starts with `#`, which is useful for temporarily disabling the creation of certain datasets.
