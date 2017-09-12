@@ -106,3 +106,5 @@ Additionally, the metascript generates the datasets for the sampling configurati
 6. `image=X`
 
 The metascript ignores any line that is empty or starts with `#`, which is useful for temporarily disabling the creation of certain datasets.
+
+Generating ALL data associated with one sampling configuration, which includes training, validation, testing, long videos, as well as all the above with only videos that include occlusion, takes about 2.8 mins on a 24-core machine. This can be sped up by commenting out the code that generates data you don't need. For example, the long videos or occlusion-only videos may not be needed.
