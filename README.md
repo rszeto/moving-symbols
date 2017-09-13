@@ -72,7 +72,7 @@ A sampling parameter configuration is defined with a JSON file whose keys match 
 
 The following is a more detailed description of the arguments in `code/main.py`. The `param_file_paths` specifies a list of sampling parameter configurations with which to generate videos. `stratum_sizes` specifies a list a numbers `[x1, x2, ...]` such that `x1` videos are sampled with the first sampling parameter configuration, `x2` videos are sampled with the second, and so on. Each of these sets can be thought of as a "stratum".
 
-`save_prefix` specifies a string identifier for the dataset, and is used to determine what to name the NumPy array files; for instance, if `save_prefix` is X, videos are saved to `X_videos.npy`, messages are saved to `X_messages.npy`, and text descriptions are saved to `X_text_descs.npy`.
+`save_prefix` specifies a path and string identifier for the dataset, and is used to determine where to save the NumPy array files; for instance, if `save_prefix` is `/some/path/X`, videos are saved to `/some/path/X_videos.npy`, messages are saved to `/some/path/X_messages.npy`, and text descriptions are saved to `/some/path/X_text_descs.npy`. If `save_prefix` does not start with a forward slash, then the path is relative to where the script is run.
 
 `verbosity_params_path` specifies a JSON file whose keys correspond to events that can be described, and whose values correspond to whether to describe those events in text. Possible key values are `describe_location`, `describe_init_scale_speed`, `describe_reverse_scale_speed`, `describe_reverse_angle_speed`, `describe_hit_digit`, `describe_hit_wall`, `describe_overlap`. These values are used in the `create_description_from_logger` function in `code/text_description.py`.
 
@@ -105,7 +105,7 @@ The messages file stores a NumPy array of N JSON strings, where N is the number 
 
 ## Preparing many datasets
 
-There is a metascript that calls the main function in `code/main.py` over a set of pre-defined sampling parameter configurations. This script generates the JSON files corresponding to about 30k combinations of different modes, where each mode controls one type of dynamics (e.g. rotation, translation) or one aspect of video content (e.g. digit classes, number of digits). 
+There is a metascript that calls the main function in `code/main.py` over a set of pre-defined sampling parameter configurations. This script generates the JSON files corresponding to about 10k combinations of different modes, where each mode controls one type of dynamics (e.g. rotation, translation) or one aspect of video content (e.g. digit classes, number of digits). 
 
 Additionally, the metascript generates the datasets for the sampling configurations listed in `metascripts/mnist_slices.txt`, where you list the names of each sampling configuration, one per line. A sampling configuration name is constructed by concatenating the names of individual settings with `+`. For example, to enable translation (`translation=on`), unbounded rotation (`rotation=no_limit`), and two digits (`num_digits=2`), you would have a line that reads `translation=on+rotation=no_limit+num_digits=2`. You cannot combine two settings with the same name on the left-hand side of the equals sign. The order of the individual settings must follow the order they are specified in `extension_dicts`, which currently is:
 
@@ -118,4 +118,6 @@ Additionally, the metascript generates the datasets for the sampling configurati
 
 The metascript ignores any line that is empty or starts with `#`, which is useful for temporarily disabling the creation of certain datasets.
 
-Generating ALL data associated with one sampling configuration, which includes training, validation, testing, long videos, as well as all the above with only videos that include occlusion, takes about 2.8 mins on a 24-core machine. This can be sped up by commenting out the code that generates data you don't need. For example, the long videos or occlusion-only videos may not be needed.
+Generating ALL data associated with one sampling configuration, which includes training, validation, testing, long videos, as well as all the above with only videos that include occlusion, takes about 2.8 mins on a 24-core machine. This can be sped up by commenting out the code that generates data you don't need. For example, the long videos or occlusion-only videos may not be needed. Since the code parallelizes over the generation of an individual dataset, run time is linear w.r.t. how many sampling configurations are used.
+
+The metascript accepts two optional arguments. The first, `--params_root`, lets you choose a custom location to store the sampling configuration JSON files. The second, `--output_root`, lets you choose a custom location to store the generated videos, messages, and text descriptions. This option is especially useful if you want to store the data, which can take up hundreds of gigabytes, in an external location.

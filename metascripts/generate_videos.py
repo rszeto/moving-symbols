@@ -4,12 +4,11 @@ import os
 from multiprocessing import Pool
 import sys
 from collections import OrderedDict
+import argparse
 
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(SCRIPT_DIR, '..', 'code'))
 import main
-
-PARAMS_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'params'))
 
 base = {
     "num_images": 1,
@@ -176,7 +175,7 @@ def is_valid_param_combo(keys):
     return True
 
 
-def generate_params(max_num_settings=len(extension_dicts.keys())):
+def generate_params(params_root, max_num_settings=len(extension_dicts.keys())):
     keys_arr = np.array(extension_dicts.keys())
     combo_tuples = powerset(range(len(keys_arr)))
     ret = []
@@ -202,13 +201,13 @@ def generate_params(max_num_settings=len(extension_dicts.keys())):
         ret.append(exp_name)
 
         # Save parameter file
-        json_path = os.path.join(PARAMS_ROOT, '%s.json' % exp_name)
+        json_path = os.path.join(params_root, '%s.json' % exp_name)
         combined_dict = combine_extension_dicts(key_list)
         with open(json_path, 'w') as f:
             json.dump(combined_dict, f, sort_keys=True, indent=2)
 
         # Save parameter file for long-term predictions
-        json_path = os.path.join(PARAMS_ROOT, '%s_long.json' % exp_name)
+        json_path = os.path.join(params_root, '%s_long.json' % exp_name)
         combined_dict = combine_extension_dicts(key_list)
         combined_dict['num_timesteps'] = 500
         with open(json_path, 'w') as f:
@@ -222,6 +221,8 @@ def generate_videos(exp_names,
                     num_val_videos,
                     num_test_videos,
                     num_long_videos,
+                    params_root,
+                    output_root,
                     verbosity_params_path=os.path.join(
                         SCRIPT_DIR, '..', 'verbosity_params', 'verbosity_short.json'),
                     num_procs=None,
@@ -229,43 +230,52 @@ def generate_videos(exp_names,
     pool = Pool(num_procs) if num_procs is not None else Pool()
     for exp_name in exp_names:
         # Generate videos
-        json_path = os.path.join(PARAMS_ROOT, '%s.json' % exp_name)
+        json_path = os.path.join(params_root, '%s.json' % exp_name)
         # Train set
-        train_save_prefix = os.path.join('..', 'output', exp_name)
+        train_save_prefix = os.path.join(output_root, exp_name)
         main.main([json_path], [num_train_videos], train_save_prefix, verbosity_params_path, num_procs, 0, pool=pool)
         if generate_overlap and 'num_digits=2' in exp_name:
-            train_save_prefix = os.path.join('..', 'output', '%s+occlusion=on' % exp_name)
+            train_save_prefix = os.path.join(output_root, '%s+occlusion=on' % exp_name)
             main.main([json_path], [num_train_videos], train_save_prefix, verbosity_params_path, num_procs, 0, pool=pool, keep_overlap_only=True)
 
         # Validation set
-        val_save_prefix = os.path.join('..', 'output', '%s_val' % exp_name)
+        val_save_prefix = os.path.join(output_root, '%s_val' % exp_name)
         main.main([json_path], [num_val_videos], val_save_prefix, verbosity_params_path, num_procs, 10, pool=pool)
         if generate_overlap and 'num_digits=2' in exp_name:
-            val_save_prefix = os.path.join('..', 'output', '%s+occlusion=on_val' % exp_name)
+            val_save_prefix = os.path.join(output_root, '%s+occlusion=on_val' % exp_name)
             main.main([json_path], [num_val_videos], val_save_prefix, verbosity_params_path, num_procs, 10, pool=pool, keep_overlap_only=True)
 
         # Test set
-        test_save_prefix = os.path.join('..', 'output', '%s_test' % exp_name)
+        test_save_prefix = os.path.join(output_root, '%s_test' % exp_name)
         main.main([json_path], [num_test_videos], test_save_prefix, verbosity_params_path, num_procs, 20, pool=pool)
         if generate_overlap and 'num_digits=2' in exp_name:
-            test_save_prefix = os.path.join('..', 'output', '%s+occlusion=on_test' % exp_name)
+            test_save_prefix = os.path.join(output_root, '%s+occlusion=on_test' % exp_name)
             main.main([json_path], [num_test_videos], test_save_prefix, verbosity_params_path, num_procs, 20, pool=pool, keep_overlap_only=True)
 
         # Long videos
-        json_path = os.path.join(PARAMS_ROOT, '%s_long.json' % exp_name)
-        long_save_prefix = os.path.join('..', 'output', '%s_long' % exp_name)
+        json_path = os.path.join(params_root, '%s_long.json' % exp_name)
+        long_save_prefix = os.path.join(output_root, '%s_long' % exp_name)
         main.main([json_path], [num_long_videos], long_save_prefix, verbosity_params_path, num_procs, 20, pool=pool)
         if generate_overlap and 'num_digits=2' in exp_name:
-            long_save_prefix = os.path.join('..', 'output', '%s+occlusion=on_long' % exp_name)
+            long_save_prefix = os.path.join(output_root, '%s+occlusion=on_long' % exp_name)
             main.main([json_path], [num_long_videos], long_save_prefix, verbosity_params_path, num_procs, 20, pool=pool, keep_overlap_only=True)
 
 
 if __name__ == '__main__':
-    if not os.path.isdir(PARAMS_ROOT):
-        os.makedirs(PARAMS_ROOT)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--params_root', type=str, default=os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'params')),
+                        help='Where the generated parameter JSON files will be saved')
+    parser.add_argument('--output_root', type=str, default=os.path.abspath(os.path.join(SCRIPT_DIR, '..', 'output')),
+                         help='Where the generated dataset files will be saved')
+    args = parser.parse_args()
+
+    if not os.path.isdir(args.params_root):
+        os.makedirs(args.params_root)
+    if not os.path.isdir(args.output_root):
+        os.makedirs(args.output_root)
 
     print('Generating parameters')
-    exp_names = generate_params()
+    exp_names = generate_params(args.params_root)
 
     print('Retrieving datasets to generate from file')
     mnist_slices_file = os.path.join(SCRIPT_DIR, 'mnist_slices.txt')
@@ -275,4 +285,4 @@ if __name__ == '__main__':
     exp_names = filter(lambda x: len(x) > 0 and not x.startswith('#'), exp_names)
 
     print('Generating videos')
-    generate_videos(exp_names, 10000, 1000, 1000, 200, generate_overlap=True)
+    generate_videos(exp_names, 10000, 1000, 1000, 200, args.params_root, args.output_root, generate_overlap=True)
