@@ -121,3 +121,14 @@ The metascript ignores any line that is empty or starts with `#`, which is usefu
 Generating ALL data associated with one sampling configuration, which includes training, validation, testing, long videos, as well as all the above with only videos that include occlusion, takes about 2.8 mins on a 24-core machine. This can be sped up by commenting out the code that generates data you don't need. For example, the long videos or occlusion-only videos may not be needed. Since the code parallelizes over the generation of an individual dataset, run time is linear w.r.t. how many sampling configurations are used.
 
 The metascript accepts two optional arguments. The first, `--params_root`, lets you choose a custom location to store the sampling configuration JSON files. The second, `--output_root`, lets you choose a custom location to store the generated videos, messages, and text descriptions. This option is especially useful if you want to store the data, which can take up hundreds of gigabytes, in an external location.
+
+## Converting from .npy to .h5
+
+DrNet reads HDF5 files instead of NumPy arrays. To generate the HDF5 files for DrNet, run these commands:
+
+```bash
+cd $PROJECT_ROOT/code
+find $OUTPUT_DIR -name *videos.npy -exec python npy_to_hdf5.py {} \;
+```
+
+where `$PROJECT_ROOT` is the root of this repository and `$OUTPUT_DIR` is the path where the videos are stored.
