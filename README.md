@@ -4,6 +4,17 @@ The Moving MNIST++ software library lets users generate videos of moving digits 
 
 ## Setup
 
+### Pre-requisites
+
+This library runs on Python 2.7 (unfortunately not on Python 3.X). It depends on the following packages, which can be installed with `pip`:
+
+* numpy
+* scipy
+* scikit-image
+* opencv-python
+
+### Downloading data
+
 Before running this code, you need to download the MNIST data and convert the digits into friendly PNG files in the folder structure Moving MNIST++ expects. To do this, go into the root directory of this project and run:
 
 ```
