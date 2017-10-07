@@ -20,10 +20,9 @@ Before running this code, you need to download the MNIST data and convert the di
 ```
 cd data
 ./generate_base_images.sh
-python mnist_raw_to_images.py
 ```
 
-Optionally, you can download backgrounds from the SUN397 dataset:
+You also need to download backgrounds from the SUN397 dataset:
 
 ```
 cd data

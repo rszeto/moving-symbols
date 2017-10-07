@@ -127,6 +127,9 @@ extension_dicts = OrderedDict([
     ('image=any', {
         "-digit_labels": None
     }),
+    ('num_timesteps=100', {
+        "num_timesteps": 100
+    })
     # ('background=single', {
     #     "use_background": True,
     #     "background_file_cats": ["c_crosswalk"],
@@ -209,7 +212,7 @@ def generate_params(params_root, max_num_settings=len(extension_dicts.keys())):
         # Save parameter file for long-term predictions
         json_path = os.path.join(params_root, '%s_long.json' % exp_name)
         combined_dict = combine_extension_dicts(key_list)
-        combined_dict['num_timesteps'] = 500
+        combined_dict['num_timesteps'] = 60
         with open(json_path, 'w') as f:
             json.dump(combined_dict, f, sort_keys=True, indent=2)
 
@@ -252,14 +255,6 @@ def generate_videos(exp_names,
             test_save_prefix = os.path.join(output_root, '%s+occlusion=on_test' % exp_name)
             main.main([json_path], [num_test_videos], test_save_prefix, verbosity_params_path, num_procs, 20, pool=pool, keep_overlap_only=True)
 
-        # Long videos
-        json_path = os.path.join(params_root, '%s_long.json' % exp_name)
-        long_save_prefix = os.path.join(output_root, '%s_long' % exp_name)
-        main.main([json_path], [num_long_videos], long_save_prefix, verbosity_params_path, num_procs, 20, pool=pool)
-        if generate_overlap and 'num_digits=2' in exp_name:
-            long_save_prefix = os.path.join(output_root, '%s+occlusion=on_long' % exp_name)
-            main.main([json_path], [num_long_videos], long_save_prefix, verbosity_params_path, num_procs, 20, pool=pool, keep_overlap_only=True)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -285,4 +280,4 @@ if __name__ == '__main__':
     exp_names = filter(lambda x: len(x) > 0 and not x.startswith('#'), exp_names)
 
     print('Generating videos')
-    generate_videos(exp_names, 10000, 1000, 1000, 200, args.params_root, args.output_root, generate_overlap=True)
+    generate_videos(exp_names, 10000, 1000, 1000, 10000, args.params_root, args.output_root, generate_overlap=False)
