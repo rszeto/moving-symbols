@@ -346,8 +346,8 @@ def create_description_from_logger(logger,
                 digit_init_state.qualifiers.append(adj)
 
         # Describe flashing
-        blink_rates = settings['blink_rates']
-        if blink_rates is not None and blink_rates[i] > 1:
+        blink_rate_range = settings['blink_rate_range']
+        if blink_rate_range is not None:
             adj = Adjective(Adjective.BLINK)
             digit_init_state.qualifiers.append(adj)
 

@@ -56,7 +56,7 @@ class MovingMNISTGenerator:
                  use_color=False, image_colors=None,
                  digit_labels=None,
                  digit_image_id=None,
-                 blink_rates=None):
+                 blink_rate_range=None):
 
         # Store copy of initial settings
         settings = locals().copy()
@@ -90,11 +90,10 @@ class MovingMNISTGenerator:
         self.enable_image_interaction = enable_image_interaction
         self.visual_debug = visual_debug
 
-        # Validate blink rates
-        if blink_rates is not None:
-            for i in blink_rates:
-                assert(i >= 0 and i != 1)
-        self.blink_rates = blink_rates
+        # Validate blink rate range
+        if blink_rate_range is not None:
+            assert len(blink_rate_range) == 2 and blink_rate_range[0] > 1 and blink_rate_range[1] >= blink_rate_range[0]
+        self.blink_rate_range = blink_rate_range
 
         self.x_lim = [0, video_size[0]] if x_lim is None else x_lim
         self.y_lim = [0, video_size[1]] if y_lim is None else y_lim
@@ -259,7 +258,7 @@ class MovingMNISTGenerator:
                    or isinstance(meta['image_path'], str))
         elif message_type == 'start_state':
             assert(step == -1)
-            assert(set_equal(meta.keys(), ['digit_id', 'scale', 'x', 'y', 'angle']))
+            assert(set_equal(meta.keys(), ['digit_id', 'scale', 'x', 'y', 'angle', 'is_visible']))
             for key, value in meta.iteritems():
                 if key == 'scale':
                     assert(isinstance(value, float))
@@ -267,7 +266,7 @@ class MovingMNISTGenerator:
                     assert(isinstance(value, int))
         elif message_type == 'start_update_params':
             assert(step == -1)
-            assert(set_equal(meta.keys(), ['digit_id', 'scale_speed', 'x_speed', 'y_speed', 'angle_speed']))
+            assert(set_equal(meta.keys(), ['digit_id', 'scale_speed', 'x_speed', 'y_speed', 'angle_speed', 'blink_rate']))
             for key, value in meta.iteritems():
                 if key == 'scale_speed':
                     assert (isinstance(value, float))
@@ -275,7 +274,7 @@ class MovingMNISTGenerator:
                     assert (isinstance(value, int))
         elif message_type == 'state':
             assert (step > -1)
-            assert (set_equal(meta.keys(), ['digit_id', 'scale', 'x', 'y', 'angle']))
+            assert (set_equal(meta.keys(), ['digit_id', 'scale', 'x', 'y', 'angle', 'is_visible']))
             for key, value in meta.iteritems():
                 if key == 'scale':
                     assert (isinstance(value, float))
@@ -283,7 +282,7 @@ class MovingMNISTGenerator:
                     assert (isinstance(value, int))
         elif message_type == 'update_params':
             assert (step > -1)
-            assert (set_equal(meta.keys(), ['digit_id', 'scale_speed', 'x_speed', 'y_speed', 'angle_speed']))
+            assert (set_equal(meta.keys(), ['digit_id', 'scale_speed', 'x_speed', 'y_speed', 'angle_speed', 'blink_rate']))
             for key, value in meta.iteritems():
                 if key == 'scale_speed':
                     assert (isinstance(value, float))
@@ -431,7 +430,8 @@ class MovingMNISTGenerator:
             scale=scale_start,
             x=x_start,
             y=y_start,
-            angle=angle_start
+            angle=angle_start,
+            is_visible=True
         )
 
         # Publish start state
@@ -452,23 +452,27 @@ class MovingMNISTGenerator:
         '''
         self.__reseed_rng__()
         x_speed = int(np.floor(np.random.uniform(self.x_speed_lim[0],
-                                    self.x_speed_lim[1])))
+                                    self.x_speed_lim[1]+1)))
         self.__reseed_rng__()
         y_speed = int(np.floor(np.random.uniform(self.y_speed_lim[0],
-                                    self.y_speed_lim[1])))
+                                    self.y_speed_lim[1]+1)))
         self.__reseed_rng__()
         scale_speed = np.random.uniform(self.scale_speed_lim[0],
                                         self.scale_speed_lim[1])
         self.__reseed_rng__()
         angle_speed = int(np.floor(np.random.uniform(self.angle_speed_lim[0],
-                                                     self.angle_speed_lim[1])))
+                                                     self.angle_speed_lim[1]+1)))
+        self.__reseed_rng__()
+        blink_rate = int(np.floor(np.random.uniform(self.blink_rate_range[0],
+                                                    self.blink_rate_range[1]+1)))
 
         update_params = dict(
             digit_id=i,
             scale_speed=scale_speed,
             x_speed=x_speed,
             y_speed=y_speed,
-            angle_speed=angle_speed
+            angle_speed=angle_speed,
+            blink_rate=blink_rate
         )
 
         # Publish update params
@@ -502,9 +506,8 @@ class MovingMNISTGenerator:
         # Overlay frames
         stitched_frame = self.background
         # Draw digits if this is not a blink frame
-        for j in range(self.num_images):
-            if self.blink_rates is None or self.blink_rates[j] == 0 or (self.step_count+1) % self.blink_rates[j] != 0:
-                stitched_frame = overlay_image(digit_frames[j], stitched_frame)
+        if self.states[j]['is_visible']:
+            stitched_frame = overlay_image(digit_frames[j], stitched_frame)
 
         # Draw bounding boxes
         if self.visual_debug:
@@ -557,6 +560,7 @@ class MovingMNISTGenerator:
             image_state['y'] += update_params['y_speed']
             image_state['angle'] = (image_state['angle'] + update_params['angle_speed'])
             image_state['scale'] += update_params['scale_speed']
+            image_state['is_visible'] = self.step_count % update_params['blink_rate'] != update_params['blink_rate']-1
 
             # Update parameters that don't require the image size
             # Scale
