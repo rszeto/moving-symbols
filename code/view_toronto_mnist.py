@@ -47,6 +47,7 @@ def view_toronto_mnist_tensor(toronto_tensor, text_descs, json_messages,
                         plt.waitforbuttonpress()
                 else:
                     plt.waitforbuttonpress()
+                plt.clf()
 
 def main():
     # Select file path (https://stackoverflow.com/a/3579625)
