@@ -9,10 +9,25 @@ import os
 from PIL import Image
 import cv2
 
-collision_types = dict(
+import matplotlib.pyplot as plt
+
+
+_COLLISION_TYPES = dict(
     icon=0,
     wall=1
 )
+
+
+def merge_dicts(*dicts):
+    """Merge the given dictionaries. Key-value pairs in later dictionaries will replace pairs in
+    earlier ones.
+    """
+    ret = {}
+    for d in dicts:
+        for k, v in d.iteritems():
+            ret[k] = v
+    return ret
+
 
 def pil_grid(images, grid_size, margin=0):
     """Create a PIL Image grid of the given images
@@ -60,6 +75,17 @@ def create_sine_fn(period, amplitude, x_offset, y_offset):
     x_offset = float(x_offset)
     y_offset = float(y_offset)
     return lambda x: amplitude * math.sin((x - x_offset) * (2 * math.pi / period)) + y_offset
+
+
+def create_triangle_fn(period, amplitude, x_offset, y_offset):
+    p = float(period)
+    a = float(amplitude)
+    x_offset = float(x_offset)
+    y_offset = float(y_offset)
+    def ret(x):
+        in_ = math.fmod(x - x_offset, p) + 7*p/4
+        return 4*a/p * (math.fabs(math.fmod(in_, p) - p/2) - p/4) + y_offset
+    return ret
 
 
 class ImageLoader:
@@ -114,7 +140,7 @@ class Icon:
 
         # Set random things so objects interact properly
         self.shape.elasticity = 1.0
-        self.shape.collision_type = collision_types['icon']
+        self.shape.collision_type = _COLLISION_TYPES['icon']
 
 
     def get_render_image_and_position(self, screen_size):
@@ -142,6 +168,22 @@ class Icon:
 
 class MovingIconEnvironment:
 
+    DEFAULT_PARAMS = dict(
+        data_dir='../data/mnist',
+        split='training',
+        num_icons=1,
+        video_size=(64, 64),
+        color_output=True,
+        icon_labels=[0],
+        scale_limits = [1.0, 1.0],
+        scale_period_limits = [1, 1],
+        rotation_speed_limits = [0, 0],
+        position_speed_limits = [0, 0],
+        interacting_icons = False,
+        scale_function_type=None
+    )
+
+
     def __init__(self, params, seed, fidelity=10, debug_options=None):
         """Constructor
 
@@ -156,7 +198,7 @@ class MovingIconEnvironment:
                               - frame_number_font_size, int: Size of the frame index font
         """
 
-        self.params = params
+        self.params = merge_dicts(MovingIconEnvironment.DEFAULT_PARAMS, params)
         self.fidelity = fidelity
         self.debug_options = debug_options
         self.video_size = self.params['video_size']
@@ -172,46 +214,53 @@ class MovingIconEnvironment:
             self._pg_font = pg.font.SysFont(pg.font.get_default_font(), font_size)
 
         self._space = pm.Space()
-
         self.icons = []
-        image_loader = ImageLoader(os.path.join(params['data_dir'], params['split']), 'tight_crop')
-        for id in xrange(params['num_icons']):
-            label = params['icon_labels'][np.random.randint(len(params['icon_labels']))]
+        image_loader = ImageLoader(os.path.join(self.params['data_dir'], self.params['split']),
+                                   'tight_crop')
+
+        for id in xrange(self.params['num_icons']):
+            label = self.params['icon_labels'][np.random.randint(len(self.params['icon_labels']))]
             image, image_path = image_loader.get_image(label)
 
             # Define the scale function
-            period = np.random.uniform(*tuple(params['scale_period_limits']))
-            amplitude = (params['scale_limits'][1] - params['scale_limits'][0]) / 2.
+            period = np.random.uniform(*tuple(self.params['scale_period_limits']))
+            amplitude = (self.params['scale_limits'][1] - self.params['scale_limits'][0]) / 2.
             x_offset = np.random.uniform(period)
-            y_offset = (params['scale_limits'][1] + params['scale_limits'][0]) / 2.
-            scale_fn = create_sine_fn(period, amplitude, x_offset, y_offset)
+            y_offset = (self.params['scale_limits'][1] + self.params['scale_limits'][0]) / 2.
+            if self.params['scale_function_type'] == 'sine':
+                scale_fn = create_sine_fn(period, amplitude, x_offset, y_offset)
+            elif self.params['scale_function_type'] == 'triangle':
+                scale_fn = create_triangle_fn(period, amplitude, x_offset, y_offset)
+            else:
+                scale_fn = lambda x: 1.0
 
             icon = Icon(id, image, image_path, scale_fn)
-
-            # Compute the minimum possible margin between the icon's center and the wall
-            w_half = image.size[0] / 2.
-            h_half = image.size[1] / 2.
-            margin = math.sqrt(w_half ** 2 + h_half ** 2) * params['scale_limits'][1]
 
             # Set the icon's initial rotation and scale
             icon.set_scale(0)
             icon.body.angle = np.random.uniform(2 * math.pi)
 
+            # Compute the minimum possible margin between the icon's center and the wall
+            w_half = image.size[0] / 2.
+            h_half = image.size[1] / 2.
+            margin = math.sqrt(w_half ** 2 + h_half ** 2) * self.params['scale_limits'][1]
             # Set the icon position at least one margin's distance from any wall
             x_limits = (margin+1, self.video_size[0] - margin - 1)
             y_limits = (margin+1, self.video_size[1] - margin - 1)
             icon.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
             # If icons will interact with each other, make sure they don't overlap initially
-            while params['interacting_icons'] and len(self._space.shape_query(icon.shape)) > 0:
+            while self.params['interacting_icons'] and len(self._space.shape_query(icon.shape)) > 0:
                 icon.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
 
             # Finally, set speeds
-            icon.body.angular_velocity = np.random.uniform(*tuple(params['rotation_speed_limits']))
+            icon.body.angular_velocity = np.random.uniform(
+                *tuple(self.params['rotation_speed_limits'])
+            )
             icon.body.angular_velocity *= 1 if np.random.binomial(1, .5) else -1
             icon.angular_velocity = icon.body.angular_velocity
             icon.body.velocity = np.random.uniform(-1, 1, 2)
             icon.body.velocity = icon.body.velocity.normalized()
-            icon.body.velocity *= np.random.uniform(*tuple(params['position_speed_limits']))
+            icon.body.velocity *= np.random.uniform(*tuple(self.params['position_speed_limits']))
 
             # Add icon to the space and environment
             self._space.add(icon.body, icon.shape)
@@ -221,7 +270,7 @@ class MovingIconEnvironment:
         self._add_walls()
         # Add collision handlers
         self._add_collision_handlers(
-            interacting_icons=params['interacting_icons']
+            interacting_icons=self.params['interacting_icons']
         )
         # Init step count
         self._step_count = 0
@@ -242,7 +291,7 @@ class MovingIconEnvironment:
         ]
         for wall in walls:
             wall.elasticity = 1.0
-            wall.collision_type = collision_types['wall']
+            wall.collision_type = _COLLISION_TYPES['wall']
         space.add(walls)
 
 
@@ -326,13 +375,13 @@ class MovingIconEnvironment:
     def _add_collision_handlers(self, interacting_icons=False):
         # Define the icon-wall handler
         body_icon_map = {icon.body: icon for icon in self.icons}
-        h = self._space.add_collision_handler(collision_types['icon'], collision_types['wall'])
+        h = self._space.add_collision_handler(_COLLISION_TYPES['icon'], _COLLISION_TYPES['wall'])
         h.pre_solve = MovingIconEnvironment._icon_wall_pre_handler
         h.post_solve = MovingIconEnvironment._icon_wall_post_handler
         h.data['body_icon_map'] = body_icon_map
 
         # Define the icon-icon handler
-        h = self._space.add_collision_handler(collision_types['icon'], collision_types['icon'])
+        h = self._space.add_collision_handler(_COLLISION_TYPES['icon'], _COLLISION_TYPES['icon'])
         if interacting_icons:
             h.pre_solve = MovingIconEnvironment._icon_icon_pre_handler
             h.post_solve = MovingIconEnvironment._icon_icon_post_handler
@@ -403,6 +452,7 @@ class MovingIconEnvironment:
 
 
 if __name__ == '__main__':
+
     seed = int(time.time())
     # seed = 1512488173
 
@@ -419,12 +469,13 @@ if __name__ == '__main__':
         num_icons=2,
         video_size=(100, 100),
         color_output=False,
-        icon_labels=[0, 1],
+        icon_labels=range(9),
         scale_limits = [0.5, 1.5],
         scale_period_limits = [40, 60],
         rotation_speed_limits = [math.radians(5), math.radians(15)],
         position_speed_limits = [1, 5],
-        interacting_icons = False
+        interacting_icons = False,
+        scale_function_type = 'sine'
     )
 
     env = MovingIconEnvironment(params, seed, debug_options=debug_options)
