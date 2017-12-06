@@ -8,6 +8,7 @@ import math
 import os
 from PIL import Image
 import cv2
+import sys
 
 import matplotlib.pyplot as plt
 
@@ -188,12 +189,20 @@ class MovingIconEnvironment:
         video_size=(64, 64),
         color_output=True,
         icon_labels=[0],
-        scale_limits = [1.0, 1.0],
-        scale_period_limits = [1, 1],
-        rotation_speed_limits = [0, 0],
-        position_speed_limits = [0, 0],
-        interacting_icons = False,
+        scale_limits=[1.0, 1.0],
+        scale_period_limits=[1, 1],
+        rotation_speed_limits=[0, 0],
+        position_speed_limits=[0, 0],
+        interacting_icons=False,
         scale_function_type=None
+    )
+
+    DEFAULT_DEBUG_OPTIONS = dict(
+        frame_number_font_size=30,
+        show_pymunk_debug=False,
+        show_bounding_poly=False,
+        show_frame_number=False,
+        frame_rate=sys.maxint
     )
 
 
@@ -211,11 +220,13 @@ class MovingIconEnvironment:
                               - show_bounding_poly, bool: Whether to render PyMunk surface outlines
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
+                              - frame_rate, int: Frame rate of the debug visualization
         """
 
         self.params = merge_dicts(MovingIconEnvironment.DEFAULT_PARAMS, params)
         self.fidelity = fidelity
-        self.debug_options = debug_options
+        self.debug_options = None if debug_options is None \
+            else merge_dicts(MovingIconEnvironment.DEFAULT_DEBUG_OPTIONS, debug_options)
         self.video_size = self.params['video_size']
 
         self.cur_rng_seed = seed
@@ -225,8 +236,9 @@ class MovingIconEnvironment:
             self._pg_screen = pg.display.set_mode(self.video_size)
             self._pg_draw_options = pmu.DrawOptions(self._pg_screen)
             pg.font.init()
-            font_size = self.debug_options.get('frame_number_font_size', 30)
+            font_size = self.debug_options['frame_number_font_size']
             self._pg_font = pg.font.SysFont(pg.font.get_default_font(), font_size)
+            self._pg_clock = pg.time.Clock()
 
         self._space = pm.Space()
         self.icons = []
@@ -435,7 +447,7 @@ class MovingIconEnvironment:
         self._pg_screen.fill(pg.color.THECOLORS['black'])
 
         # Use PyMunk's default drawing function (guaranteed correctness)
-        if self.debug_options.get('show_pymunk_debug', False):
+        if self.debug_options['show_pymunk_debug']:
             self._space.debug_draw(self._pg_draw_options)
 
         # Draw each icon
@@ -444,7 +456,7 @@ class MovingIconEnvironment:
             self._pg_screen.blit(rotated_image, pg_image_pos)
 
         # Draw polygon outline on top
-        if self.debug_options.get('show_bounding_poly', False):
+        if self.debug_options['show_bounding_poly']:
             for icon in self.icons:
                 ps = [p.rotated(icon.body.angle) + icon.body.position
                       for p in icon.shape.get_vertices()]
@@ -454,11 +466,12 @@ class MovingIconEnvironment:
 
         # Print step number
         text = self._pg_font.render(str(self._step_count), False, pg.color.THECOLORS['green'])
-        if self.debug_options.get('show_frame_number', False):
+        if self.debug_options['show_frame_number']:
             self._pg_screen.blit(text, (0, 0))
 
         # Refresh PyGame screen
         pg.display.flip()
+        self._pg_clock.tick(self.debug_options['frame_rate'])
         # Return an Image of the current PyGame (debug) screen
         pg_screen_bytes = pg.image.tostring(self._pg_screen, 'RGB')
         return Image.frombytes('RGB', self.video_size, pg_screen_bytes)
@@ -489,6 +502,34 @@ class MovingIconEnvironment:
         return Image.fromarray(ret)
 
 
+    ### GENERATOR METHODS ###
+    def send(self, _):
+        if self.debug_options is not None:
+            self._render_pg()
+        ret = self._render_cv()
+        self._step()
+        return ret
+
+    def throw(self, type=None, value=None, traceback=None):
+        raise StopIteration
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        return self.send(None)
+
+    def close(self):
+        try:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
+            pass
+        else:
+            raise RuntimeError('Generator ignored GeneratorExit')
+    ### END GENERATOR METHODS ###
+
+
+
 if __name__ == '__main__':
 
     seed = int(time.time())
@@ -498,7 +539,7 @@ if __name__ == '__main__':
         show_bounding_poly=True,
         show_frame_number=True
     )
-    # debug_options = None
+    debug_options = None
 
     params = dict(
         data_dir='../data/mnist',
@@ -518,10 +559,7 @@ if __name__ == '__main__':
     env = MovingIconEnvironment(params, seed, debug_options=debug_options)
     print(env.cur_rng_seed)
 
-    for _ in xrange(10000):
-        cv_image = env._render_cv()
-        if debug_options is not None:
-            pg_image = env._render_pg()
+    for _ in xrange(150):
+        cv_image = env.next()
         cv2.imshow(None, np.array(cv_image.convert('RGB'))[:, :, ::-1])
-        cv2.waitKey(1000/15)
-        env._step()
+        cv2.waitKey(1000/60)
