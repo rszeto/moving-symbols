@@ -206,7 +206,9 @@ class MovingIconEnvironment:
         :param fidelity: How many iterations to run in the physics simulator per step (int)
         :param debug_options: dict with options for visual debugging. The following key-value
                               pairs are supported:
-                              - show_meshes, bool: Whether to render PyMunk meshes
+                              - show_pymunk_debug, bool: Whether to use PyMunk's default drawing
+                                function
+                              - show_bounding_poly, bool: Whether to render PyMunk surface outlines
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
         """
@@ -428,19 +430,36 @@ class MovingIconEnvironment:
         """
         if self.debug_options is None:
             raise RuntimeError('_render_pg cannot be called since no debug options were given.')
+
+        # Use black background
         self._pg_screen.fill(pg.color.THECOLORS['black'])
-        if self.debug_options.get('show_meshes', False):
+
+        # Use PyMunk's default drawing function (guaranteed correctness)
+        if self.debug_options.get('show_pymunk_debug', False):
             self._space.debug_draw(self._pg_draw_options)
+
+        # Draw each icon
         for icon in self.icons:
             rotated_image, pg_image_pos = icon.get_render_image_and_position(self.video_size)
             self._pg_screen.blit(rotated_image, pg_image_pos)
+
+        # Draw polygon outline on top
+        if self.debug_options.get('show_bounding_poly', False):
+            for icon in self.icons:
+                ps = [p.rotated(icon.body.angle) + icon.body.position
+                      for p in icon.shape.get_vertices()]
+                ps = [(p.x, self.video_size[1] - p.y) for p in ps]
+                ps += [ps[0]]
+                pg.draw.lines(self._pg_screen, pg.color.THECOLORS['red'], False, ps, 1)
+
         # Print step number
         text = self._pg_font.render(str(self._step_count), False, pg.color.THECOLORS['green'])
         if self.debug_options.get('show_frame_number', False):
             self._pg_screen.blit(text, (0, 0))
+
         # Refresh PyGame screen
         pg.display.flip()
-
+        # Return an Image of the current PyGame (debug) screen
         pg_screen_bytes = pg.image.tostring(self._pg_screen, 'RGB')
         return Image.frombytes('RGB', self.video_size, pg_screen_bytes)
 
@@ -473,12 +492,11 @@ class MovingIconEnvironment:
 if __name__ == '__main__':
 
     seed = int(time.time())
-    seed = 1512518328
+    # seed = 1512518328
 
     debug_options = dict(
-        show_meshes=True,
-        show_frame_number=True,
-        frame_number_font_size=30
+        show_bounding_poly=True,
+        show_frame_number=True
     )
     # debug_options = None
 
