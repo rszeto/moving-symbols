@@ -69,6 +69,16 @@ def tight_crop_2(image):
     return cropped_image
 
 
+def compute_pm_hull_vertices(image):
+    """Get PyMunk vertices that enclose the alpha channel of a given RGBA image."""
+    alpha = np.array(image)[:,:,3]
+    nonzero_points = cv2.findNonZero(alpha)
+    hull = cv2.convexHull(nonzero_points).squeeze()
+    # Flip the y-axis since it points up in PyMunk
+    hull[:, 1] = image.size[1] - hull[:, 1]
+    return hull
+
+
 def create_sine_fn(period, amplitude, x_offset, y_offset):
     period = float(period)
     amplitude = float(amplitude)
@@ -129,9 +139,12 @@ class Icon:
         self.image_path = image_path
         self.pg_image = pg.image.fromstring(image.tobytes(), image.size, image.mode)
 
+        # Get vertices
+        hull = compute_pm_hull_vertices(self.image)
+
         self.body = pm.Body(1, pm.inf)
-        self.shape = pm.Poly.create_box(self.body, size=self.image.size)
-        self._base_vertices = [pm.Vec2d(pt) for pt in self.shape.get_vertices()]
+        self._base_vertices = [pt - [dim/2. for dim in self.image.size] for pt in hull]
+        self.shape = pm.Poly(self.body, self._base_vertices)
         self.scale_fn = scale_fn
         self.scale = None
 
@@ -232,7 +245,8 @@ class MovingIconEnvironment:
             elif self.params['scale_function_type'] == 'triangle':
                 scale_fn = create_triangle_fn(period, amplitude, x_offset, y_offset)
             else:
-                scale_fn = lambda x: 1.0
+                scale = np.random.uniform(*self.params['scale_limits'])
+                scale_fn = lambda x: scale
 
             icon = Icon(id, image, image_path, scale_fn)
 
@@ -448,20 +462,25 @@ class MovingIconEnvironment:
             alpha = np.stack([overlay[:, :, 3] for _ in xrange(3)], axis=2)
             ret = (1 - alpha) * ret + alpha * overlay[:, :, :3]
 
-        return Image.fromarray(np.multiply(ret, 255).astype(np.uint8))
+        # Get image to RGB 0-255 format
+        ret = np.multiply(ret, 255).astype(np.uint8)
+        # Convert image to grayscale if specified
+        if not self.params['color_output']:
+            ret = cv2.cvtColor(ret, cv2.COLOR_RGB2GRAY)
+        return Image.fromarray(ret)
 
 
 if __name__ == '__main__':
 
     seed = int(time.time())
-    # seed = 1512488173
+    seed = 1512518328
 
     debug_options = dict(
         show_meshes=True,
         show_frame_number=True,
         frame_number_font_size=30
     )
-    debug_options = None
+    # debug_options = None
 
     params = dict(
         data_dir='../data/mnist',
@@ -469,13 +488,13 @@ if __name__ == '__main__':
         num_icons=2,
         video_size=(100, 100),
         color_output=False,
-        icon_labels=range(9),
-        scale_limits = [0.5, 1.5],
+        icon_labels=range(10),
+        scale_limits = [2.5, 2.5],
         scale_period_limits = [40, 60],
         rotation_speed_limits = [math.radians(5), math.radians(15)],
         position_speed_limits = [1, 5],
-        interacting_icons = False,
-        scale_function_type = 'sine'
+        # interacting_icons = True,
+        # scale_function_type = 'sine'
     )
 
     env = MovingIconEnvironment(params, seed, debug_options=debug_options)
@@ -485,6 +504,6 @@ if __name__ == '__main__':
         cv_image = env._render_cv()
         if debug_options is not None:
             pg_image = env._render_pg()
-        cv2.imshow(None, np.array(cv_image)[:,:,::-1])
+        cv2.imshow(None, np.array(cv_image.convert('RGB'))[:, :, ::-1])
         cv2.waitKey(1000/15)
         env._step()

@@ -2,6 +2,9 @@ import os
 import struct
 import numpy as np
 from scipy.misc import imsave
+import cv2
+import matplotlib.pyplot as plt
+from PIL import Image
 
 """
 Loosely inspired by http://abel.ee.ucla.edu/cvxopt/_downloads/mnist.py
@@ -43,16 +46,22 @@ def mnist_read(dataset = "training", path = "."):
 def main():
     splits = ['training', 'testing']
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    mnist_data_dir = os.path.join(script_dir, 'mnist')
 
     for split in splits:
         digit_counts = np.zeros(10)
-        split_dir = os.path.join(script_dir, split)
+        split_dir = os.path.join(mnist_data_dir, split)
         mnist_iter = mnist_read(split)
-        for label, image in mnist_iter:
+        for label, alpha_mask in mnist_iter:
             digit_dir = os.path.join(split_dir, str(label))
             if not os.path.isdir(digit_dir):
                 os.makedirs(digit_dir)
-            imsave(os.path.join(digit_dir, '%04d.png' % digit_counts[label]), image)
+            # Convert to RGBA
+            _, color_mask = cv2.threshold(alpha_mask, 0, 255, cv2.THRESH_BINARY)
+            image = np.stack((color_mask, color_mask, color_mask, alpha_mask), axis=-1)
+            image_path = os.path.join(digit_dir, '%04d.png' % digit_counts[label])
+            with open(image_path, 'w') as f:
+                Image.fromarray(image).save(f)
             digit_counts[label] += 1
 
 
