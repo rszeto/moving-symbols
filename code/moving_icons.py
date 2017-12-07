@@ -181,6 +181,49 @@ class Icon:
 
 
 class MovingIconEnvironment:
+    """Generator that produces Moving Icon video frames.
+
+    This class manages a physical environment in which icons move around. It also handles
+    rendering of the current physical state. Renders are returned as PIL images, either in RGB or
+    L (8-bit grayscale) mode.
+
+    The physical state is initialized based on the parameters given to the constructor. Below are
+    the key-value pairs that can be specified:
+
+    - data_dir, str: Path to the dataset directory. The dataset directory should contain one
+      folder for each split, e.g. "training" and "testing", and each split directory should
+      contain folders for each class (e.g. 0, ..., 9 for MNIST digits).
+    - split, str: Name of the data split to sample from
+    - num_icons, int: How many icons should appear in the video
+    - video_size, (int, int): The resolution of the video as (width, height)
+    - color_output, bool: Whether to produce "RGB" color images or "L" grayscale images
+    - icon_labels, Sequence: The labels for the icon classes. These must be strings or ints (or
+      any object with __str__ implemented) that match the names of the folders in each split
+      directory
+    - scale_limits, [float, float]: The minimum and maximum scale of an object relative to its
+      original size
+    - scale_period_limits, [float, float]: The minimum and maximum duration of a full scale cycle
+      in number of frames
+    - rotation_speed_limits, [float, float]: The minimum and maximum angular speed, in radians
+      per frame
+    - position_speed_limits, [float, float]: The minimum and maximum translational speed,
+      in pixels per frame
+    - interacting_icons, bool: Whether icons will bounce off each other
+    - scale_function_type, str: The class of function used to define the scale of each icon at
+      each time step. Supported options are:
+      - "sine": Scale is determined by a sine wave
+      - "triangle": Scale is determined by a triangle wave (i.e. scaling speed is constant,
+        but switches directions if the digit gets too big or small)
+      - "constant": The icons do not change scale. Initial scale is randomly sampled from within
+        scale_limits
+
+    Additionally, debugging options can be given to the constructor. Below are the key-value
+    pairs that can be specified:
+
+    - frame_number_font_size: How large to make the frame count text
+    - show_pymunk_debug: Draw objects with PyMunk's built-in rendering function
+    - show_bounding_poly: Draw a polygon
+    """
 
     DEFAULT_PARAMS = dict(
         data_dir='../data/mnist',
@@ -194,7 +237,7 @@ class MovingIconEnvironment:
         rotation_speed_limits=[0, 0],
         position_speed_limits=[0, 0],
         interacting_icons=False,
-        scale_function_type=None
+        scale_function_type='constant'
     )
 
     DEFAULT_DEBUG_OPTIONS = dict(
@@ -258,9 +301,12 @@ class MovingIconEnvironment:
                 scale_fn = create_sine_fn(period, amplitude, x_offset, y_offset)
             elif self.params['scale_function_type'] == 'triangle':
                 scale_fn = create_triangle_fn(period, amplitude, x_offset, y_offset)
-            else:
+            elif self.params['scale_function_type'] == 'constant':
                 scale = np.random.uniform(*self.params['scale_limits'])
                 scale_fn = lambda x: scale
+            else:
+                raise ValueError('scale_function_type "%s" is unsupported'
+                                 % self.params['scale_function_type'])
 
             icon = Icon(id, image, image_path, scale_fn)
 
@@ -478,6 +524,15 @@ class MovingIconEnvironment:
 
 
     def _render_cv(self):
+        """Generate a PIL Image of the scene at the current state.
+
+        Generate an Image containing the visualized scene as rendered by OpenCV. This renders the
+        scene using floating-point position, scale, and rotation, so it should be used for the
+        final render. It outputs a PIL Image in either "RGB" or "L" mode depending on the value
+        of the "color_output" flag specified in the constructor parameters.
+
+        :return: Image (RGB or L format)
+        """
         ret = np.zeros((self.video_size[1], self.video_size[0], 3), dtype=np.float32)
 
         for x, icon in enumerate(self.icons):
@@ -541,25 +596,30 @@ if __name__ == '__main__':
     )
     debug_options = None
 
+    data_dir = '../data/icons8'
+
     params = dict(
-        data_dir='../data/mnist',
+        data_dir=data_dir,
         split='training',
-        num_icons=2,
-        video_size=(100, 100),
-        color_output=False,
-        icon_labels=range(10),
-        scale_limits = [2.5, 2.5],
+        num_icons=10,
+        video_size=(200, 200),
+        color_output=True,
+        icon_labels=os.listdir(os.path.join(data_dir, 'training')),
+        scale_limits = [0.5, 1.5],
         scale_period_limits = [40, 60],
         rotation_speed_limits = [math.radians(5), math.radians(15)],
         position_speed_limits = [1, 5],
-        # interacting_icons = True,
-        # scale_function_type = 'sine'
+        interacting_icons = False,
+        scale_function_type = 'sine'
     )
 
     env = MovingIconEnvironment(params, seed, debug_options=debug_options)
     print(env.cur_rng_seed)
 
-    for _ in xrange(150):
+    fourcc = cv2.cv.CV_FOURCC(*'XVID')
+    writer = cv2.VideoWriter('demo.avi', fourcc, 30, (200, 200))
+
+    for i in xrange(150):
         cv_image = env.next()
-        cv2.imshow(None, np.array(cv_image.convert('RGB'))[:, :, ::-1])
-        cv2.waitKey(1000/60)
+        writer.write(np.array(cv_image.convert('RGB'))[:, :, ::-1])
+    writer.release()
