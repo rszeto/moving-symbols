@@ -1,7 +1,6 @@
 import math
 import os
 import sys
-import time
 
 import cv2
 import numpy as np
@@ -9,6 +8,7 @@ import pygame as pg
 import pymunk as pm
 import pymunk.pygame_util as pmu
 from PIL import Image
+
 from moving_icons_utils import merge_dicts, tight_crop, compute_pm_hull_vertices, \
     create_sine_fn, create_triangle_fn
 
@@ -54,6 +54,13 @@ class ImageLoader:
 class Icon:
 
     def __init__(self, id, image, image_path, scale_fn):
+        """Constructor
+
+        :param id: A numerical ID for this icon
+        :param image: The base PIL image for this icon
+        :param image_path: The path to the (unprocessed) image file
+        :param scale_fn: A function that returns the scale of the icon at any given time t
+        """
         self.id = id
         self.image = image
         self.image_path = image_path
@@ -77,6 +84,11 @@ class Icon:
 
 
     def get_render_image_and_position(self, screen_size):
+        """Get the PyGame Surface and center coordinate of the scaled, rotated icon.
+
+        :param screen_size: (width, height) of the PyGame screen
+        :return:
+        """
         # Get scaled image
         scaled_image = pg.transform.smoothscale(
             self.pg_image, tuple([int(x * self.scale) for x in self.image.size])
@@ -94,6 +106,11 @@ class Icon:
 
 
     def set_scale(self, step):
+        """Set the scale of the icon to the scaling function at the given time step
+
+        :param step: The current time step of the environment
+        :return:
+        """
         self.scale = self.scale_fn(step)
         self.shape.unsafe_set_vertices(self._base_vertices,
                                        transform=pm.Transform(self.scale, 0, 0, self.scale, 0, 0))
@@ -366,6 +383,14 @@ class MovingIconEnvironment:
 
 
     def _add_collision_handlers(self, interacting_icons=False):
+        """Add custom collision handlers in the PyMunk space.
+
+        This method adds collision handlers to ensure that angular velocities do not affect
+        translational speeds.
+
+        :param interacting_icons: Boolean for whether icons should bounce off each other
+        :return:
+        """
         # Define the icon-wall handler
         body_icon_map = {icon.body: icon for icon in self.icons}
         h = self._space.add_collision_handler(_COLLISION_TYPES['icon'], _COLLISION_TYPES['wall'])
@@ -501,44 +526,3 @@ class MovingIconEnvironment:
         else:
             raise RuntimeError('Generator ignored GeneratorExit')
     ### END GENERATOR METHODS ###
-
-
-
-if __name__ == '__main__':
-
-    seed = int(time.time())
-    # seed = 1512518328
-
-    debug_options = dict(
-        show_bounding_poly=True,
-        show_frame_number=True
-    )
-    debug_options = None
-
-    data_dir = '../data/icons8'
-
-    params = dict(
-        data_dir=data_dir,
-        split='training',
-        num_icons=10,
-        video_size=(200, 200),
-        color_output=True,
-        icon_labels=os.listdir(os.path.join(data_dir, 'training')),
-        scale_limits = [0.5, 1.5],
-        scale_period_limits = [40, 60],
-        rotation_speed_limits = [math.radians(5), math.radians(15)],
-        position_speed_limits = [1, 5],
-        interacting_icons = False,
-        scale_function_type = 'sine'
-    )
-
-    env = MovingIconEnvironment(params, seed, debug_options=debug_options)
-    print(env.cur_rng_seed)
-
-    fourcc = cv2.cv.CV_FOURCC(*'XVID')
-    writer = cv2.VideoWriter('demo.avi', fourcc, 30, (200, 200))
-
-    for i in xrange(150):
-        cv_image = env.next()
-        writer.write(np.array(cv_image.convert('RGB'))[:, :, ::-1])
-    writer.release()
