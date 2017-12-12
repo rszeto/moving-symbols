@@ -1,3 +1,4 @@
+from abc import ABCMeta, abstractmethod
 import math
 import os
 import sys
@@ -106,7 +107,7 @@ class Icon:
 
 
     def set_scale(self, step):
-        """Set the scale of the icon to the scaling function at the given time step
+        """Set the scale of the icon to the scaling function at the given time step.
 
         :param step: The current time step of the environment
         :return:
@@ -114,6 +115,53 @@ class Icon:
         self.scale = self.scale_fn(step)
         self.shape.unsafe_set_vertices(self._base_vertices,
                                        transform=pm.Transform(self.scale, 0, 0, self.scale, 0, 0))
+
+
+    def get_state_message(self, step):
+        """Produce a message about the state of the icon at the given time step.
+
+        Return a message containing information about the current pose and motion of the icon.
+        Everything is a float except for id (int), position (np.float array with shape (2,)),
+        and velocity (np.float array with shape (2,)).
+
+        :param step: The time step of the MovingIconEnvironment
+        """
+        dt = 0.001
+        scale_velocity = (self.scale_fn(step + dt) - self.scale_fn(step)) / dt
+        return dict(
+            step=step,
+            type='icon_state',
+            meta=dict(
+                id=self.id,
+                position=np.array(self.body.position),
+                angle=self.body.angle,
+                scale=self.scale,
+                velocity=np.array(self.body.velocity),
+                angular_velocity=self.angular_velocity,
+                scale_velocity=scale_velocity
+            )
+        )
+
+    def get_init_message(self):
+        """Produce a message about fixed properties of the icon, i.e. image data
+
+        Return a message containing information required to reconstruct the appearance and shape
+        of the icon. The returned meta information includes the icon ID, the image as a HxWx4
+        np.uint8 array, the path to the source image, and the vertices of the icon shape,
+        in PyMunk coordinates, as a Vx2 np.float array.
+
+        """
+        ret = dict(
+            step=-1,
+            type='icon_init',
+            meta=dict(
+                id=self.id,
+                image=np.array(self.image),
+                image_path=self.image_path,
+                vertices=np.array(self._base_vertices)
+            )
+        )
+        return ret
 
 
 class MovingIconEnvironment:
@@ -185,7 +233,7 @@ class MovingIconEnvironment:
     )
 
 
-    def __init__(self, params, seed, fidelity=10, debug_options=None):
+    def __init__(self, params, seed, fidelity=10, debug_options=None, initial_subscribers=[]):
         """Constructor
 
         :param params: Parameters that define how icons behave and are rendered. See method
@@ -200,6 +248,8 @@ class MovingIconEnvironment:
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
                               - frame_rate, int: Frame rate of the debug visualization
+        :param initial_subscribers: list of AbstractMovingIconSubscribers that receive
+                                    constructor messages
         """
 
         self.params = merge_dicts(MovingIconEnvironment.DEFAULT_PARAMS, params)
@@ -207,6 +257,13 @@ class MovingIconEnvironment:
         self.debug_options = None if debug_options is None \
             else merge_dicts(MovingIconEnvironment.DEFAULT_DEBUG_OPTIONS, debug_options)
         self.video_size = self.params['video_size']
+        self._subscribers = initial_subscribers
+
+        self._publish_message(dict(
+            step=-1,
+            type='params',
+            meta=dict(self.params)
+        ))
 
         self.cur_rng_seed = seed
         np.random.seed(self.cur_rng_seed)
@@ -218,6 +275,11 @@ class MovingIconEnvironment:
             font_size = self.debug_options['frame_number_font_size']
             self._pg_font = pg.font.SysFont(pg.font.get_default_font(), font_size)
             self._pg_clock = pg.time.Clock()
+            self._publish_message(dict(
+                step=-1,
+                type='debug_options',
+                meta=dict(debug_options)
+            ))
 
         self._space = pm.Space()
         self.icons = []
@@ -275,6 +337,9 @@ class MovingIconEnvironment:
             # Add icon to the space and environment
             self._space.add(icon.body, icon.shape)
             self.icons.append(icon)
+
+            # Publish message about the icon
+            self._publish_message(icon.get_init_message())
 
         # Add walls
         self._add_walls()
@@ -412,6 +477,10 @@ class MovingIconEnvironment:
 
     def _step(self):
         """Update the positions, scales, and rotations of each icon."""
+        # First, publish messages about current icon states
+        for icon in self.icons:
+            self._publish_message(icon.get_state_message(self._step_count))
+        # Now walk through simulation
         self._step_count += 1
         # Update scale of each icon
         for icon in self.icons:
@@ -501,6 +570,27 @@ class MovingIconEnvironment:
         return Image.fromarray(ret)
 
 
+    def _publish_message(self, message):
+        """Publish a message to any subscribers
+
+        :param message: Dict of information to publish
+        :return:
+        """
+        assert(isinstance(message, dict))
+        for subscriber in self._subscribers:
+            subscriber.process_message(dict(message))
+
+
+    def add_subscriber(self, subscriber):
+        """Add a subscriber to published messages
+
+        :param subscriber: An AbstractMovingIconSubscriber instance
+        :return:
+        """
+        assert(isinstance(subscriber, AbstractMovingIconSubscriber))
+        self._subscribers.append(subscriber)
+
+
     ### GENERATOR METHODS ###
     def send(self, _):
         if self.debug_options is not None:
@@ -526,3 +616,11 @@ class MovingIconEnvironment:
         else:
             raise RuntimeError('Generator ignored GeneratorExit')
     ### END GENERATOR METHODS ###
+
+
+class AbstractMovingIconSubscriber:
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def process_message(self, message):
+        pass
