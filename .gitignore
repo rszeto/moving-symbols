@@ -1,6 +1,12 @@
 .idea/
-data/training/
-data/testing/
+.env/
+data/icons8/
+data/mnist/
+data/omniglot/
+backgrounds/
+output
+output/
 *.avi
 *.npy
 *.pyc
+*.mat
