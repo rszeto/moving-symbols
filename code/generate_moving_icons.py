@@ -106,6 +106,7 @@ def generate_moving_icons_video((seed, num_frames, params)):
 
 def generate_all_moving_icon_videos(pool, pool_seed, num_videos, num_frames, params,
                                     dataset_name):
+    print('Working on %s...' % dataset_name)
     output_dir = os.path.join('..', 'output')
     arg_tups = [(seed, num_frames, params) for seed in xrange(pool_seed, pool_seed+num_videos)]
     # Get list of V TxHxW(xC) videos
@@ -119,9 +120,9 @@ def generate_all_moving_icon_videos(pool, pool_seed, num_videos, num_frames, par
 
 def main():
     pool_seed = 123
-    num_training_videos = 100
+    num_training_videos = 10000
     num_training_frames = 20
-    num_testing_videos = 10
+    num_testing_videos = 1000
     num_testing_frames = 30
 
     pool = multiprocessing.Pool()
