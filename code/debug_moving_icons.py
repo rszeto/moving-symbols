@@ -24,18 +24,18 @@ class MovingIconCaptionGenerator(AbstractMovingIconSubscriber):
 if __name__ == '__main__':
 
     seed = int(time.time())
-    seed = 1512518328
+    seed = 1513280009
 
     debug_options = dict(
         show_bounding_poly=True,
         show_frame_number=True
     )
-    debug_options = None
+    # debug_options = None
 
     params = dict(
         data_dir='../data/mnist',
         split='training',
-        num_icons=1,
+        num_icons=2,
         video_size=(100, 100),
         color_output=False,
         icon_labels=range(10),
@@ -53,19 +53,48 @@ if __name__ == '__main__':
     print(env.cur_rng_seed)
 
 
-    # Display loop
+    # # Display loop
+    # for _ in xrange(50):
+    #     image = env.next()
+    #     cv2.imshow(None, np.array(image.convert('RGB'))[:, :, ::-1])
+    #     cv2.waitKey(1000/10)
+    #     # cv2.waitKey()
+
+    # Print messages and show video
     images = []
-    for _ in xrange(150):
-        cv_image = env.next()
-        images.append(cv_image)
+    for _ in xrange(50):
+        image = env.next()
+        images.append(image)
+    messages = filter(lambda x: x['type'] != 'icon_state', sub.messages)
+    pprint(messages)
 
-    with open('test.pkl', 'w') as f:
-        pickle.dump(sub.messages, f)
-    with open('test.pkl', 'r') as f:
-        dumped = pickle.load(f)
-    pprint(dumped)
-    os.remove('test.pkl')
+    # Show frames sequentially
+    for i, image in enumerate(images):
+        cv_image = np.array(image.convert('RGB'))[:, :, ::-1].copy()
+        cv2.putText(cv_image, '%d' % i, (0, 10), cv2.FONT_HERSHEY_DUPLEX, 0.4, (0, 255, 0))
+        cv2.imshow(None, cv_image)
+        cv2.waitKey()
 
-    for image in images:
-        cv2.imshow(None, np.array(image.convert('RGB'))[:, :, ::-1])
-        cv2.waitKey(1000/60)
+    # # Show all frames in grid
+    # grid_w = 6
+    # grid_h = int(math.ceil(len(images)/float(grid_w)))
+    # margin = 5
+    # im_w, im_h = images[0].size
+    # full_image_w = grid_w * im_w + (grid_w-1) * margin
+    # full_image_h = grid_h * im_h + (grid_h-1) * margin
+    # full_image = np.zeros((full_image_h, full_image_w, 3), dtype=np.uint8)
+    # full_image[:, :, :] = np.array([255, 0, 0])
+    #
+    # for i, image in enumerate(images):
+    #     grid_x = i % grid_w
+    #     grid_y = (i - grid_x) / grid_w
+    #     cv_image = np.array(image.convert('RGB'))[:, :, ::-1].copy()
+    #     cv2.putText(cv_image, '%d' % i, (0, 10), cv2.FONT_HERSHEY_DUPLEX, 0.4, (0, 255, 0))
+    #     full_image[
+    #         grid_y * (im_h+margin):grid_y*(im_h+margin)+im_h,
+    #         grid_x * (im_w+margin):grid_x*(im_w+margin)+im_w,
+    #         :
+    #     ] = cv_image
+    #
+    # cv2.imshow(None, full_image)
+    # cv2.waitKey()

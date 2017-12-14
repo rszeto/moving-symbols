@@ -54,15 +54,17 @@ class ImageLoader:
 
 class Icon:
 
-    def __init__(self, id, image, image_path, scale_fn):
+    def __init__(self, id, label, image, image_path, scale_fn):
         """Constructor
 
         :param id: A numerical ID for this icon
+        :param label: The class label of this icon
         :param image: The base PIL image for this icon
         :param image_path: The path to the (unprocessed) image file
         :param scale_fn: A function that returns the scale of the icon at any given time t
         """
         self.id = id
+        self.label = label
         self.image = image
         self.image_path = image_path
         self.pg_image = pg.image.fromstring(image.tobytes(), image.size, image.mode)
@@ -132,7 +134,7 @@ class Icon:
             step=step,
             type='icon_state',
             meta=dict(
-                id=self.id,
+                icon_id=self.id,
                 position=np.array(self.body.position),
                 angle=self.body.angle,
                 scale=self.scale,
@@ -155,7 +157,8 @@ class Icon:
             step=-1,
             type='icon_init',
             meta=dict(
-                id=self.id,
+                icon_id=self.id,
+                label=self.label,
                 image=np.array(self.image),
                 image_path=self.image_path,
                 vertices=np.array(self._base_vertices)
@@ -306,7 +309,7 @@ class MovingIconEnvironment:
                 raise ValueError('scale_function_type "%s" is unsupported'
                                  % self.params['scale_function_type'])
 
-            icon = Icon(id, image, image_path, scale_fn)
+            icon = Icon(id, label, image, image_path, scale_fn)
 
             # Set the icon's initial rotation and scale
             icon.set_scale(0)
@@ -447,6 +450,68 @@ class MovingIconEnvironment:
         return True
 
 
+    @staticmethod
+    def _icon_wall_begin_handler(arbiter, space, data):
+        """Log the point where an icon first touches a wall.
+
+        :param arbiter:
+        :param space:
+        :param data:
+        :return:
+        """
+        icon_id = data['body_icon_map'][arbiter.shapes[0].body].id
+
+        # Identify the wall that was hit based on the wall shape's normal
+        wall_normal = arbiter.shapes[1].normal
+        if wall_normal == pm.Vec2d(1, 0):
+            wall_label = 'left'
+        elif wall_normal == pm.Vec2d(-1, 0):
+            wall_label = 'right'
+        elif wall_normal == pm.Vec2d(0, -1):
+            wall_label = 'bottom'
+        elif wall_normal == pm.Vec2d(0, 1):
+            wall_label = 'top'
+
+        data['mie']._publish_message(dict(
+            step=data['mie']._step_count,
+            type='hit_wall',
+            meta=dict(
+                icon_id=icon_id,
+                wall_label=wall_label
+            )
+        ))
+        return True
+
+
+    @staticmethod
+    def _icon_icon_overlap_begin_handler(arbiter, space, data):
+        overlapping_icon_ids = (data['body_icon_map'][arbiter.shapes[0].body].id,
+                                data['body_icon_map'][arbiter.shapes[1].body].id)
+        data['mie']._publish_message(dict(
+            step=data['mie']._step_count,
+            type='start_overlap',
+            meta=dict(
+                icon_ids=overlapping_icon_ids
+            )
+        ))
+        # Don't call pre_solve or post_solve handlers (separate handler will still be called)
+        return False
+
+
+    @staticmethod
+    def _icon_icon_overlap_separate_handler(arbiter, space, data):
+        overlapping_icon_ids = (data['body_icon_map'][arbiter.shapes[0].body].id,
+                                data['body_icon_map'][arbiter.shapes[1].body].id)
+        data['mie']._publish_message(dict(
+            step=data['mie']._step_count,
+            type='end_overlap',
+            meta=dict(
+                icon_ids=overlapping_icon_ids
+            )
+        ))
+        return True
+
+
     def _add_collision_handlers(self, interacting_icons=False):
         """Add custom collision handlers in the PyMunk space.
 
@@ -459,18 +524,22 @@ class MovingIconEnvironment:
         # Define the icon-wall handler
         body_icon_map = {icon.body: icon for icon in self.icons}
         h = self._space.add_collision_handler(_COLLISION_TYPES['icon'], _COLLISION_TYPES['wall'])
+        h.begin = MovingIconEnvironment._icon_wall_begin_handler
         h.pre_solve = MovingIconEnvironment._icon_wall_pre_handler
         h.post_solve = MovingIconEnvironment._icon_wall_post_handler
         h.data['body_icon_map'] = body_icon_map
+        h.data['mie'] = self
 
         # Define the icon-icon handler
         h = self._space.add_collision_handler(_COLLISION_TYPES['icon'], _COLLISION_TYPES['icon'])
+        h.data['body_icon_map'] = body_icon_map
+        h.data['mie'] = self
         if interacting_icons:
             h.pre_solve = MovingIconEnvironment._icon_icon_pre_handler
             h.post_solve = MovingIconEnvironment._icon_icon_post_handler
-            h.data['body_icon_map'] = body_icon_map
         else:
-            h.begin = lambda arbiter, space, data: False
+            h.begin = MovingIconEnvironment._icon_icon_overlap_begin_handler
+            h.separate = MovingIconEnvironment._icon_icon_overlap_separate_handler
 
         # TODO: Also add handlers that log events
 
