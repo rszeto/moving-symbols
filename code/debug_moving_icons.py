@@ -24,13 +24,13 @@ class MovingIconCaptionGenerator(AbstractMovingIconSubscriber):
 if __name__ == '__main__':
 
     seed = int(time.time())
-    seed = 1513280009
+    # seed = 1513280009
 
     debug_options = dict(
         show_bounding_poly=True,
         show_frame_number=True
     )
-    # debug_options = None
+    debug_options = None
 
     params = dict(
         data_dir='../data/mnist',
@@ -44,7 +44,8 @@ if __name__ == '__main__':
         rotation_speed_limits = [math.radians(5), math.radians(15)],
         position_speed_limits = [1, 5],
         # interacting_icons = True,
-        scale_function_type = 'triangle'
+        scale_function_type = 'sine',
+        lateral_motion_at_start = True
     )
 
     sub = MovingIconCaptionGenerator()
@@ -65,7 +66,8 @@ if __name__ == '__main__':
     for _ in xrange(50):
         image = env.next()
         images.append(image)
-    messages = filter(lambda x: x['type'] != 'icon_state', sub.messages)
+    # messages = filter(lambda x: x['type'] != 'icon_state', sub.messages)
+    messages = sub.messages
     pprint(messages)
 
     # Show frames sequentially
