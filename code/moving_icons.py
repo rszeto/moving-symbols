@@ -11,7 +11,7 @@ import pymunk.pygame_util as pmu
 from PIL import Image
 
 from moving_icons_utils import merge_dicts, tight_crop, compute_pm_hull_vertices, \
-    create_sine_fn, create_triangle_fn
+    create_sine_fn, create_triangle_fn, get_closest_axis_vector
 
 _COLLISION_TYPES = dict(
     icon=0,
@@ -54,15 +54,17 @@ class ImageLoader:
 
 class Icon:
 
-    def __init__(self, id, image, image_path, scale_fn):
+    def __init__(self, id, label, image, image_path, scale_fn):
         """Constructor
 
         :param id: A numerical ID for this icon
+        :param label: The class label of the image
         :param image: The base PIL image for this icon
         :param image_path: The path to the (unprocessed) image file
         :param scale_fn: A function that returns the scale of the icon at any given time t
         """
         self.id = id
+        self.label = label
         self.image = image
         self.image_path = image_path
         self.pg_image = pg.image.fromstring(image.tobytes(), image.size, image.mode)
@@ -156,6 +158,7 @@ class Icon:
             type='icon_init',
             meta=dict(
                 icon_id=self.id,
+                label=self.label,
                 image=np.array(self.image),
                 image_path=self.image_path,
                 vertices=np.array(self._base_vertices)
@@ -200,6 +203,8 @@ class MovingIconEnvironment:
         but switches directions if the digit gets too big or small)
       - "constant": The icons do not change scale. Initial scale is randomly sampled from within
         scale_limits
+    - lateral_motion_at_start, bool: Whether icons can only move horizontally or vertically to
+      start. If set to True, icons will only move non-laterally if they bounce off other icons.
 
     Additionally, debugging options can be given to the constructor. Below are the key-value
     pairs that can be specified:
@@ -221,7 +226,8 @@ class MovingIconEnvironment:
         rotation_speed_limits=(0, 0),
         position_speed_limits=(0, 0),
         interacting_icons=False,
-        scale_function_type='constant'
+        scale_function_type='constant',
+        lateral_motion_at_start=False
     )
 
     DEFAULT_DEBUG_OPTIONS = dict(
@@ -317,7 +323,7 @@ class MovingIconEnvironment:
                 raise ValueError('scale_function_type "%s" is unsupported'
                                  % self.params['scale_function_type'])
 
-            icon = Icon(id, image, image_path, scale_fn)
+            icon = Icon(id, label, image, image_path, scale_fn)
 
             # Set the icon's initial rotation and scale
             icon.set_scale(0)
@@ -344,6 +350,8 @@ class MovingIconEnvironment:
             icon.angular_velocity = icon.body.angular_velocity
             icon.body.velocity = np.random.uniform(-1, 1, 2)
             icon.body.velocity = icon.body.velocity.normalized()
+            if self.params['lateral_motion_at_start']:
+                icon.body.velocity = get_closest_axis_vector(icon.body.velocity)
             position_speed_limit_index = np.random.choice(len(self.params['position_speed_limits']))
             icon.body.velocity *= np.random.uniform(
                 *tuple(self.params['position_speed_limits'][position_speed_limit_index])

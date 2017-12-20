@@ -89,7 +89,7 @@ def main():
         video_size=(64, 64),
         color_output=False,
         icon_labels=range(10),
-        position_speed_limits=[8, 8],
+        position_speed_limits=(8, 8),
         lateral_motion_at_start=True
     )
 

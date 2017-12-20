@@ -43,8 +43,7 @@ if __name__ == '__main__':
         scale_period_limits = (40, 40),
         rotation_speed_limits = (0, 0),
         position_speed_limits = [(1, 5), (20, 20)],
-        scale_function_type = 'sine',
-        lateral_motion_at_start = True
+        scale_function_type = 'sine'
     )
 
     sub = MovingIconCaptionGenerator()

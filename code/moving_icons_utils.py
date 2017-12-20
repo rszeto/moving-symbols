@@ -1,6 +1,7 @@
 import cv2
 import math
 
+import pymunk as pm
 import numpy as np
 from PIL import Image
 
@@ -83,3 +84,20 @@ def create_triangle_fn(period, amplitude, x_offset, y_offset):
         in_ = math.fmod(x - x_offset, p) + 7*p/4
         return 4*a/p * (math.fabs(math.fmod(in_, p) - p/2) - p/4) + y_offset
     return ret
+
+
+def get_closest_axis_vector(v):
+    """Map v to whichever of (0, 1), (0, -1), (1, 0), (-1, 0) is closest to v by angle.
+    :param v: A PyMunk Vec2d object
+    :return: A PyMunk Vec2d object
+    """
+    # Get angle from (0, 1)
+    angle = math.degrees(np.arctan2(v[1], v[0]))
+    if -135 <= angle < -45:
+        return pm.Vec2d(0, -1)
+    elif -45 <= angle < 45:
+        return pm.Vec2d(1, 0)
+    elif 45 <= angle < 135:
+        return pm.Vec2d(0, 1)
+    else:
+        return pm.Vec2d(-1, 0)
