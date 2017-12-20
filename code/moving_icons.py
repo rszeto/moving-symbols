@@ -54,17 +54,15 @@ class ImageLoader:
 
 class Icon:
 
-    def __init__(self, id, label, image, image_path, scale_fn):
+    def __init__(self, id, image, image_path, scale_fn):
         """Constructor
 
         :param id: A numerical ID for this icon
-        :param label: The class label of this icon
         :param image: The base PIL image for this icon
         :param image_path: The path to the (unprocessed) image file
         :param scale_fn: A function that returns the scale of the icon at any given time t
         """
         self.id = id
-        self.label = label
         self.image = image
         self.image_path = image_path
         self.pg_image = pg.image.fromstring(image.tobytes(), image.size, image.mode)
@@ -158,7 +156,6 @@ class Icon:
             type='icon_init',
             meta=dict(
                 icon_id=self.id,
-                label=self.label,
                 image=np.array(self.image),
                 image_path=self.image_path,
                 vertices=np.array(self._base_vertices)
@@ -187,14 +184,14 @@ class MovingIconEnvironment:
     - icon_labels, Sequence: The labels for the icon classes. These must be strings or ints (or
       any object with __str__ implemented) that match the names of the folders in each split
       directory
-    - scale_limits, [float, float]: The minimum and maximum scale of an object relative to its
+    - scale_limits, (float, float): The minimum and maximum scale of an object relative to its
       original size
-    - scale_period_limits, [float, float]: The minimum and maximum duration of a full scale cycle
-      in number of frames
-    - rotation_speed_limits, [float, float]: The minimum and maximum angular speed, in radians
-      per frame
-    - position_speed_limits, [float, float]: The minimum and maximum translational speed,
-      in pixels per frame
+    - scale_period_limits, (float, float) or list of (float, float): The minimum and maximum
+      duration of a full scale cycle in number of frames
+    - rotation_speed_limits, (float, float) or list of (float, float): The minimum and maximum
+      angular speed, in radians per frame
+    - position_speed_limits, (float, float) or list of (float, float): The minimum and maximum
+      translational speed, in pixels per frame
     - interacting_icons, bool: Whether icons will bounce off each other
     - scale_function_type, str: The class of function used to define the scale of each icon at
       each time step. Supported options are:
@@ -203,13 +200,6 @@ class MovingIconEnvironment:
         but switches directions if the digit gets too big or small)
       - "constant": The icons do not change scale. Initial scale is randomly sampled from within
         scale_limits
-    - rotate_at_start, bool: Whether icons can start at a rotated angle
-    - rescale_at_start, bool: Whether icons can start at any scale in the specified range. If
-                              not. the scale of all icons is initialized to the middle of the
-                              allowed scale range.
-    - lateral_motion_at_start, bool: Whether icons can only translate left/right/up/down to
-                                     start. If this is True, icons can only move non-laterally if
-                                     they bounce off of other icons.
 
     Additionally, debugging options can be given to the constructor. Below are the key-value
     pairs that can be specified:
@@ -226,15 +216,12 @@ class MovingIconEnvironment:
         video_size=(64, 64),
         color_output=True,
         icon_labels=[0],
-        scale_limits=[1.0, 1.0],
-        scale_period_limits=[1, 1],
-        rotation_speed_limits=[0, 0],
-        position_speed_limits=[0, 0],
+        scale_limits=(1.0, 1.0),
+        scale_period_limits=(1, 1),
+        rotation_speed_limits=(0, 0),
+        position_speed_limits=(0, 0),
         interacting_icons=False,
-        scale_function_type='constant',
-        rotate_at_start=False,
-        rescale_at_start=True,
-        lateral_motion_at_start=False
+        scale_function_type='constant'
     )
 
     DEFAULT_DEBUG_OPTIONS = dict(
@@ -278,6 +265,14 @@ class MovingIconEnvironment:
             meta=dict(self.params)
         ))
 
+        # Convert translation/rotation/scale period/speed limits to lists
+        if isinstance(self.params['scale_period_limits'], tuple):
+            self.params['scale_period_limits'] = [self.params['scale_period_limits']]
+        if isinstance(self.params['rotation_speed_limits'], tuple):
+            self.params['rotation_speed_limits'] = [self.params['rotation_speed_limits']]
+        if isinstance(self.params['position_speed_limits'], tuple):
+            self.params['position_speed_limits'] = [self.params['position_speed_limits']]
+
         self.cur_rng_seed = seed
         np.random.seed(self.cur_rng_seed)
 
@@ -304,14 +299,12 @@ class MovingIconEnvironment:
             image, image_path = image_loader.get_image(label)
 
             # Define the scale function
-            period = np.random.uniform(*tuple(self.params['scale_period_limits']))
+            period_limits_index = np.random.choice(len(self.params['scale_period_limits']))
+            period = np.random.uniform(
+                *tuple(self.params['scale_period_limits'][period_limits_index])
+            )
             amplitude = (self.params['scale_limits'][1] - self.params['scale_limits'][0]) / 2.
             x_offset = np.random.uniform(period)
-            # Override offset if digits should not start at random scale
-            if not self.params['rescale_at_start']:
-                x_offset = 0
-            # Randomly shift offset (i.e. icon can either grow or shrink at start)
-            x_offset += (period/2 if np.random.choice([True, False]) else 0)
             y_offset = (self.params['scale_limits'][1] + self.params['scale_limits'][0]) / 2.
             if self.params['scale_function_type'] == 'sine':
                 scale_fn = create_sine_fn(period, amplitude, x_offset, y_offset)
@@ -324,13 +317,11 @@ class MovingIconEnvironment:
                 raise ValueError('scale_function_type "%s" is unsupported'
                                  % self.params['scale_function_type'])
 
-            icon = Icon(id, label, image, image_path, scale_fn)
+            icon = Icon(id, image, image_path, scale_fn)
 
             # Set the icon's initial rotation and scale
             icon.set_scale(0)
-            start_angle = np.random.uniform(2 * math.pi)
-            if self.params['rotate_at_start']:
-                icon.body.angle = start_angle
+            icon.body.angle = np.random.uniform(2 * math.pi)
 
             # Compute the minimum possible margin between the icon's center and the wall
             w_half = image.size[0] / 2.
@@ -344,28 +335,19 @@ class MovingIconEnvironment:
             while self.params['interacting_icons'] and len(self._space.shape_query(icon.shape)) > 0:
                 icon.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
 
-            # Set angular velocity
+            # Finally, set speeds
+            rotation_speed_limit_index = np.random.choice(len(self.params['rotation_speed_limits']))
             icon.body.angular_velocity = np.random.uniform(
-                *tuple(self.params['rotation_speed_limits'])
+                *tuple(self.params['rotation_speed_limits'][rotation_speed_limit_index])
             )
             icon.body.angular_velocity *= 1 if np.random.binomial(1, .5) else -1
             icon.angular_velocity = icon.body.angular_velocity
-
-            # Set translational velocity
-            sampled_velocity = np.random.uniform(-1, 1, 2)
-            # If only lateral motion is allowed, map velocity to the nearest lateral one
-            if self.params['lateral_motion_at_start']:
-                v_angle = math.degrees(np.arctan2(sampled_velocity[1], sampled_velocity[0]))
-                if v_angle >= -135 and v_angle < -45:
-                    sampled_velocity = np.array([0, -1])
-                elif v_angle >= -45 and v_angle < 45:
-                    sampled_velocity = np.array([1, 0])
-                elif v_angle >= 45 and v_angle < 135:
-                    sampled_velocity = np.array([0, 1])
-                else:
-                    sampled_velocity = np.array([-1, 0])
-            icon.body.velocity = sampled_velocity / np.linalg.norm(sampled_velocity)
-            icon.body.velocity *= np.random.uniform(*tuple(self.params['position_speed_limits']))
+            icon.body.velocity = np.random.uniform(-1, 1, 2)
+            icon.body.velocity = icon.body.velocity.normalized()
+            position_speed_limit_index = np.random.choice(len(self.params['position_speed_limits']))
+            icon.body.velocity *= np.random.uniform(
+                *tuple(self.params['position_speed_limits'][position_speed_limit_index])
+            )
 
             # Add icon to the space and environment
             self._space.add(icon.body, icon.shape)
@@ -498,9 +480,9 @@ class MovingIconEnvironment:
         elif wall_normal == pm.Vec2d(-1, 0):
             wall_label = 'right'
         elif wall_normal == pm.Vec2d(0, -1):
-            wall_label = 'bottom'
-        elif wall_normal == pm.Vec2d(0, 1):
             wall_label = 'top'
+        elif wall_normal == pm.Vec2d(0, 1):
+            wall_label = 'bottom'
 
         data['mie']._publish_message(dict(
             step=data['mie']._step_count,

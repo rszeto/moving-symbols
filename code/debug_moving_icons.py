@@ -35,15 +35,14 @@ if __name__ == '__main__':
     params = dict(
         data_dir='../data/mnist',
         split='training',
-        num_icons=2,
+        num_icons=4,
         video_size=(100, 100),
         color_output=False,
         icon_labels=range(10),
-        scale_limits = [0.5, 1.5],
-        scale_period_limits = [40, 60],
-        rotation_speed_limits = [math.radians(5), math.radians(15)],
-        position_speed_limits = [1, 5],
-        # interacting_icons = True,
+        scale_limits = (0.5, 1.5),
+        scale_period_limits = (40, 40),
+        rotation_speed_limits = (0, 0),
+        position_speed_limits = [(1, 5), (20, 20)],
         scale_function_type = 'sine',
         lateral_motion_at_start = True
     )
@@ -75,7 +74,7 @@ if __name__ == '__main__':
         cv_image = np.array(image.convert('RGB'))[:, :, ::-1].copy()
         cv2.putText(cv_image, '%d' % i, (0, 10), cv2.FONT_HERSHEY_DUPLEX, 0.4, (0, 255, 0))
         cv2.imshow(None, cv_image)
-        cv2.waitKey()
+        cv2.waitKey(1000/10)
 
     # # Show all frames in grid
     # grid_w = 6
