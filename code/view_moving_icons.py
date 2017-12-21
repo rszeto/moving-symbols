@@ -7,6 +7,7 @@ import re
 import os
 from pprint import pprint
 import json
+import cv2
 
 def view_toronto_mnist_tensor(toronto_tensor,
                               vid_ids=None, delay=None, prompt_keypress=False,
@@ -19,28 +20,25 @@ def view_toronto_mnist_tensor(toronto_tensor,
     :return:
     '''
     vid_id_list = range(toronto_tensor.shape[1]) if vid_ids is None else vid_ids
-    plt.figure()
     while True:
         for vid_id in vid_id_list:
             video = toronto_tensor[:, vid_id]
 
             # Show info
             for i in range(video.shape[0]):
-                plt.clf()
-                if video.ndim == 3:
-                    plt.imshow(video[i], cmap='gray', vmin=0, vmax=255)
-                else:
-                    plt.imshow(video[i], vmin=0, vmax=255)
-                plt.tight_layout()
-                plt.draw()
+                large_frame = cv2.resize(video[i], (256, 256), interpolation=cv2.INTER_NEAREST)
+                cv2.imshow(None, large_frame)
                 if delay:
-                    plt.pause(delay)
+                    # plt.pause(delay)
+                    cv2.waitKey(delay)
                     if i == video.shape[0]-1 and prompt_keypress:
                         print('Ended video. Press any key to continue.')
-                        plt.waitforbuttonpress()
+                        # plt.waitforbuttonpress()
+                        cv2.waitKey()
                 else:
-                    plt.waitforbuttonpress()
-                plt.clf()
+                    # plt.waitforbuttonpress()
+                    cv2.waitKey()
+                # plt.clf()
 
 def main():
     # Select file path (https://stackoverflow.com/a/3579625)
@@ -59,7 +57,7 @@ def main():
 
     # Show info
     print('Video tensor shape: %s ' % str(video_tensor.shape))
-    view_toronto_mnist_tensor(video_tensor, delay=0.001, vid_ids=None)
+    view_toronto_mnist_tensor(video_tensor, delay=1000/30, vid_ids=None)
 
 
 if __name__ == '__main__':

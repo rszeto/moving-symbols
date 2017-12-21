@@ -11,7 +11,7 @@ import pymunk.pygame_util as pmu
 from PIL import Image
 
 from moving_icons_utils import merge_dicts, tight_crop, compute_pm_hull_vertices, \
-    create_sine_fn, create_triangle_fn, get_closest_axis_vector
+    create_sine_fn, create_triangle_fn
 
 _COLLISION_TYPES = dict(
     icon=0,
@@ -58,7 +58,7 @@ class Icon:
         """Constructor
 
         :param id: A numerical ID for this icon
-        :param label: The class label of the image
+        :param label: The class label of this icon
         :param image: The base PIL image for this icon
         :param image_path: The path to the (unprocessed) image file
         :param scale_fn: A function that returns the scale of the icon at any given time t
@@ -203,8 +203,13 @@ class MovingIconEnvironment:
         but switches directions if the digit gets too big or small)
       - "constant": The icons do not change scale. Initial scale is randomly sampled from within
         scale_limits
-    - lateral_motion_at_start, bool: Whether icons can only move horizontally or vertically to
-      start. If set to True, icons will only move non-laterally if they bounce off other icons.
+    - rotate_at_start, bool: Whether icons can start at a rotated angle
+    - rescale_at_start, bool: Whether icons can start at any scale in the specified range. If
+                              not. the scale of all icons is initialized to the middle of the
+                              allowed scale range.
+    - lateral_motion_at_start, bool: Whether icons can only translate left/right/up/down to
+                                     start. If this is True, icons can only move non-laterally if
+                                     they bounce off of other icons.
 
     Additionally, debugging options can be given to the constructor. Below are the key-value
     pairs that can be specified:
@@ -227,6 +232,8 @@ class MovingIconEnvironment:
         position_speed_limits=(0, 0),
         interacting_icons=False,
         scale_function_type='constant',
+        rotate_at_start=False,
+        rescale_at_start=True,
         lateral_motion_at_start=False
     )
 
@@ -311,6 +318,11 @@ class MovingIconEnvironment:
             )
             amplitude = (self.params['scale_limits'][1] - self.params['scale_limits'][0]) / 2.
             x_offset = np.random.uniform(period)
+            # Override offset if digits should not start at random scale
+            if not self.params['rescale_at_start']:
+                x_offset = 0
+            # Randomly shift offset (i.e. icon can either grow or shrink at start)
+            x_offset += (period/2 if np.random.choice([True, False]) else 0)
             y_offset = (self.params['scale_limits'][1] + self.params['scale_limits'][0]) / 2.
             if self.params['scale_function_type'] == 'sine':
                 scale_fn = create_sine_fn(period, amplitude, x_offset, y_offset)
@@ -327,7 +339,9 @@ class MovingIconEnvironment:
 
             # Set the icon's initial rotation and scale
             icon.set_scale(0)
-            icon.body.angle = np.random.uniform(2 * math.pi)
+            start_angle = np.random.uniform(2 * math.pi)
+            if self.params['rotate_at_start']:
+                icon.body.angle = start_angle
 
             # Compute the minimum possible margin between the icon's center and the wall
             w_half = image.size[0] / 2.
@@ -341,17 +355,28 @@ class MovingIconEnvironment:
             while self.params['interacting_icons'] and len(self._space.shape_query(icon.shape)) > 0:
                 icon.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
 
-            # Finally, set speeds
+            # Set angular velocity
             rotation_speed_limit_index = np.random.choice(len(self.params['rotation_speed_limits']))
             icon.body.angular_velocity = np.random.uniform(
                 *tuple(self.params['rotation_speed_limits'][rotation_speed_limit_index])
             )
             icon.body.angular_velocity *= 1 if np.random.binomial(1, .5) else -1
             icon.angular_velocity = icon.body.angular_velocity
-            icon.body.velocity = np.random.uniform(-1, 1, 2)
-            icon.body.velocity = icon.body.velocity.normalized()
+
+            # Set translational velocity
+            sampled_velocity = np.random.uniform(-1, 1, 2)
+            # If only lateral motion is allowed, map velocity to the nearest lateral one
             if self.params['lateral_motion_at_start']:
-                icon.body.velocity = get_closest_axis_vector(icon.body.velocity)
+                v_angle = math.degrees(np.arctan2(sampled_velocity[1], sampled_velocity[0]))
+                if v_angle >= -135 and v_angle < -45:
+                    sampled_velocity = np.array([0, -1])
+                elif v_angle >= -45 and v_angle < 45:
+                    sampled_velocity = np.array([1, 0])
+                elif v_angle >= 45 and v_angle < 135:
+                    sampled_velocity = np.array([0, 1])
+                else:
+                    sampled_velocity = np.array([-1, 0])
+            icon.body.velocity = sampled_velocity / np.linalg.norm(sampled_velocity)
             position_speed_limit_index = np.random.choice(len(self.params['position_speed_limits']))
             icon.body.velocity *= np.random.uniform(
                 *tuple(self.params['position_speed_limits'][position_speed_limit_index])

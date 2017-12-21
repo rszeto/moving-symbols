@@ -35,15 +35,16 @@ if __name__ == '__main__':
     params = dict(
         data_dir='../data/mnist',
         split='training',
-        num_icons=4,
+        num_icons=10,
         video_size=(100, 100),
         color_output=False,
         icon_labels=range(10),
         scale_limits = (0.5, 1.5),
-        scale_period_limits = (40, 40),
-        rotation_speed_limits = (0, 0),
+        scale_period_limits = [(10, 15), (40, 40)],
+        # rotation_speed_limits = [(0, 0), (math.radians(10), math.radians(20))],
         position_speed_limits = [(1, 5), (20, 20)],
-        scale_function_type = 'sine'
+        scale_function_type = 'sine',
+        scale_at_start=False
     )
 
     sub = MovingIconCaptionGenerator()
