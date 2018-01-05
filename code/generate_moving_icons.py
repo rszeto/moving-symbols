@@ -4,8 +4,9 @@ import os
 
 import numpy as np
 
+from code.moving_icons.moving_icons_utils import merge_dicts
 from moving_icons import MovingIconEnvironment
-from moving_icons_utils import merge_dicts
+
 
 def get_param_dicts():
 
