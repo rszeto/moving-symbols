@@ -3,7 +3,7 @@ from PIL import Image
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    raw_images_root = os.path.join(script_dir, 'symbols8_raw')
+    raw_images_root = os.path.join(script_dir, 'icons8_raw')
     final_images_root = os.path.join(script_dir, 'icons8')
     final_size = (28, 28)
     resample_strategy = Image.NEAREST

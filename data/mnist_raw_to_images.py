@@ -3,7 +3,6 @@ import struct
 import numpy as np
 from scipy.misc import imsave
 import cv2
-import matplotlib.pyplot as plt
 from PIL import Image
 
 """
