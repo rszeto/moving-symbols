@@ -1,11 +1,21 @@
-"""ICLRw experiments as of 12/21/17"""
+"""
+Generates the training and testing splits used in our ICLR 2018 Workshop Track submission
+"A Dataset To Evaluate The Representations Learned By Video Prediction Models".
+
+Author: Ryan Szeto
+"""
 
 import multiprocessing
 import os
+import sys
 
 import numpy as np
 
+PROJ_ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+sys.path.append(PROJ_ROOT_DIR)
+
 from moving_icons import MovingIconEnvironment, AbstractMovingIconSubscriber
+
 
 class MovingIconClassTrajectoryTracker(AbstractMovingIconSubscriber):
     """Object that gets the icon classes and trajectories of the generated video"""
@@ -39,46 +49,46 @@ class MovingIconClassTrajectoryTracker(AbstractMovingIconSubscriber):
 
 
 def get_param_dicts():
-    # Generalizing rate, slow -> fast
+    # Generalizing rate, slow -> fast and fast -> slow
     mnist_training_slow_params = {
-        'data_dir': '../data/mnist',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
         'icon_labels': range(10),
         'position_speed_limits': (1, 5)
     }
     mnist_training_fast_params = {
-        'data_dir': '../data/mnist',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
         'icon_labels': range(10),
-        'position_speed_limits': (1, 5)
+        'position_speed_limits': (6, 9)
     }
     mnist_testing_fast_params = {
-        'data_dir': '../data/mnist',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'testing',
         'color_output': False,
         'icon_labels': range(10),
         'position_speed_limits': (6, 9)
     }
+    mnist_testing_slow_params = {
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+        'split': 'testing',
+        'color_output': False,
+        'icon_labels': range(10),
+        'position_speed_limits': (1, 5)
+    }
 
     # Generalizing rate, slow & fast -> medium
     mnist_training_slow_fast_params = {
-        'data_dir': '../data/mnist',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
         'icon_labels': range(10),
         'position_speed_limits': [(1, 3), (7, 9)]
     }
-    mnist_training_medium_params = {
-        'data_dir': '../data/mnist',
-        'split': 'training',
-        'color_output': False,
-        'icon_labels': range(10),
-        'position_speed_limits': (4, 6)
-    }
     mnist_testing_medium_params = {
-        'data_dir': '../data/mnist',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'testing',
         'color_output': False,
         'icon_labels': range(10),
@@ -87,30 +97,30 @@ def get_param_dicts():
 
     # Generalizing appearance, MNIST -> Icons8
     mnist_training_params = {
-        'data_dir': '../data/mnist',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
         'icon_labels': range(10),
         'position_speed_limits': (1, 9)
     }
     icons8_testing_params = {
-        'data_dir': '../data/icons8',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
         'split': 'testing',
         'color_output': False,
-        'icon_labels': os.listdir('../data/icons8/training'),
+        'icon_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
         'position_speed_limits': (1, 9)
     }
 
     # Generalizing appearance, Icons8 -> MNIST
     icons8_training_params = {
-        'data_dir': '../data/icons8',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
         'split': 'training',
         'color_output': False,
-        'icon_labels': os.listdir('../data/icons8/training'),
+        'icon_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
         'position_speed_limits': (1, 9)
     }
     mnist_testing_params = {
-        'data_dir': '../data/mnist',
+        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'testing',
         'color_output': False,
         'icon_labels': range(10),
@@ -121,13 +131,13 @@ def get_param_dicts():
         'mnist_training_slow': mnist_training_slow_params,
         'mnist_training_fast': mnist_training_fast_params,
         'mnist_training_slow_fast': mnist_training_slow_fast_params,
-        'mnist_training_medium': mnist_training_medium_params,
         'mnist_training': mnist_training_params,
         'icons8_training': icons8_training_params
     }
 
     testing_dicts = {
         'mnist_testing_fast': mnist_testing_fast_params,
+        'mnist_testing_slow': mnist_testing_slow_params,
         'mnist_testing_medium': mnist_testing_medium_params,
         'icons8_testing': icons8_testing_params,
         'mnist_testing': mnist_testing_params
@@ -142,7 +152,7 @@ def generate_moving_icons_video((seed, num_frames, params)):
     env = MovingIconEnvironment(params, seed, initial_subscribers=[sub])
 
     all_frames = []
-    for i in xrange(num_frames):
+    for _ in xrange(num_frames):
         frame = env.next()
         all_frames.append(np.array(frame))
     video_tensor = np.array(all_frames, dtype=np.uint8)
@@ -151,14 +161,12 @@ def generate_moving_icons_video((seed, num_frames, params)):
     return video_tensor, icon_classes, trajectories
 
 
-def generate_all_moving_icon_videos(pool, pool_seed, num_videos, num_frames, params,
-                                    dataset_name):
+def generate_all_moving_icon_videos(pool, pool_seed, num_videos, num_frames, params, dataset_name):
     print('Working on %s...' % dataset_name)
-    output_dir = os.path.join('..', 'output')
+    output_dir = os.path.join(PROJ_ROOT_DIR, 'output')
     arg_tups = [(seed, num_frames, params) for seed in xrange(pool_seed, pool_seed+num_videos)]
     # Get list of V TxHxW(xC) videos
     video_data = pool.map(generate_moving_icons_video, arg_tups)
-    # video_data = map(generate_moving_icons_video, arg_tups)
     videos, icon_classes, trajectories = zip(*video_data)
     videos = np.stack(videos, axis=0)  # V x T x H x W (x C)
     icon_classes = np.stack(icon_classes, axis=0)  # V x D
