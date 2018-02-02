@@ -10,12 +10,12 @@ be added in the future, or perhaps someone can make a pull request to make it su
 
 ## Dependencies
 
-* PIL==5.0.0
-* pygame==1.9.3
-* pymunk==5.3.2
-* numpy==1.14.0
-* opencv-python==3.4.0.12
-* scipy==1.0.0
+* PIL >= 5.0.0
+* pygame >= 1.9.3
+* pymunk >= 5.3.2
+* numpy >= 1.14.0
+* opencv-python >= 3.4.0.12
+* scipy >= 1.0.0
 
 The packages listed above need to be installed. This can be done via `pip`.
 
