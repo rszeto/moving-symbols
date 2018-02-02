@@ -11,7 +11,7 @@ import sys
 
 import numpy as np
 
-PROJ_ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+PROJ_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJ_ROOT_DIR)
 
 from moving_symbols import MovingSymbolsEnvironment, AbstractMovingSymbolsSubscriber
@@ -184,6 +184,11 @@ def main():
     num_training_frames = 20
     num_testing_videos = 1000
     num_testing_frames = 30
+
+    # Make output directory
+    output_dir = os.path.join(PROJ_ROOT_DIR, 'output')
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
 
     pool = multiprocessing.Pool()
     training_params, testing_params = get_param_dicts()
