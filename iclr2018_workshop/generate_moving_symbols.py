@@ -14,38 +14,38 @@ import numpy as np
 PROJ_ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(PROJ_ROOT_DIR)
 
-from moving_icons import MovingIconEnvironment, AbstractMovingIconSubscriber
+from moving_symbols import MovingSymbolsEnvironment, AbstractMovingSymbolsSubscriber
 
 
-class MovingIconClassTrajectoryTracker(AbstractMovingIconSubscriber):
-    """Object that gets the icon classes and trajectories of the generated video"""
+class MovingSymbolsClassTrajectoryTracker(AbstractMovingSymbolsSubscriber):
+    """Object that gets the symbol classes and trajectories of the generated video"""
 
     def __init__(self):
-        self.icon_classes = {}
+        self.symbol_classes = {}
         self.trajectories = {}
 
 
     def process_message(self, message):
         """Store the message."""
         meta = message['meta']
-        if message['type'] == 'icon_init':
-            self.icon_classes[meta['icon_id']] = meta['label']
-        elif message['type'] == 'icon_state':
-            if meta['icon_id'] not in self.trajectories:
-                self.trajectories[meta['icon_id']] = []
-            self.trajectories[meta['icon_id']].append(meta['position'])
+        if message['type'] == 'symbol_init':
+            self.symbol_classes[meta['symbol_id']] = meta['label']
+        elif message['type'] == 'symbol_state':
+            if meta['symbol_id'] not in self.trajectories:
+                self.trajectories[meta['symbol_id']] = []
+            self.trajectories[meta['symbol_id']].append(meta['position'])
 
     def get_info(self):
-        """Return the trajectories and icon classes
+        """Return the trajectories and symbol classes
 
-        :return: num_icons np.array, num_icons x T x 2 np.array
+        :return: num_symbols np.array, num_symbols x T x 2 np.array
         """
-        sorted_keys = sorted(self.icon_classes.keys())
-        icon_classes_np = np.array([self.icon_classes[k] for k in sorted_keys])
+        sorted_keys = sorted(self.symbol_classes.keys())
+        symbol_classes_np = np.array([self.symbol_classes[k] for k in sorted_keys])
         for k in sorted_keys:
             self.trajectories[k] = np.stack(self.trajectories[k], axis=0)
         trajectories_np = np.stack([self.trajectories[k] for k in sorted_keys], axis=0)
-        return icon_classes_np, trajectories_np
+        return symbol_classes_np, trajectories_np
 
 
 def get_param_dicts():
@@ -54,28 +54,28 @@ def get_param_dicts():
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': (1, 5)
     }
     mnist_training_fast_params = {
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': (6, 9)
     }
     mnist_testing_fast_params = {
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'testing',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': (6, 9)
     }
     mnist_testing_slow_params = {
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'testing',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': (1, 5)
     }
 
@@ -84,14 +84,14 @@ def get_param_dicts():
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': [(1, 3), (7, 9)]
     }
     mnist_testing_medium_params = {
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'testing',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': (4, 6)
     }
 
@@ -100,14 +100,14 @@ def get_param_dicts():
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'training',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': (1, 9)
     }
     icons8_testing_params = {
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
         'split': 'testing',
         'color_output': False,
-        'icon_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
+        'symbol_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
         'position_speed_limits': (1, 9)
     }
 
@@ -116,14 +116,14 @@ def get_param_dicts():
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
         'split': 'training',
         'color_output': False,
-        'icon_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
+        'symbol_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
         'position_speed_limits': (1, 9)
     }
     mnist_testing_params = {
         'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
         'split': 'testing',
         'color_output': False,
-        'icon_labels': range(10),
+        'symbol_labels': range(10),
         'position_speed_limits': (1, 9)
     }
 
@@ -146,35 +146,35 @@ def get_param_dicts():
     return training_dicts, testing_dicts
 
 
-def generate_moving_icons_video((seed, num_frames, params)):
+def generate_moving_symbols_video((seed, num_frames, params)):
     """Create the T x H x W (x C) NumPy array for one video."""
-    sub = MovingIconClassTrajectoryTracker()
-    env = MovingIconEnvironment(params, seed, initial_subscribers=[sub])
+    sub = MovingSymbolsClassTrajectoryTracker()
+    env = MovingSymbolsEnvironment(params, seed, initial_subscribers=[sub])
 
     all_frames = []
     for _ in xrange(num_frames):
         frame = env.next()
         all_frames.append(np.array(frame))
     video_tensor = np.array(all_frames, dtype=np.uint8)
-    icon_classes, trajectories = sub.get_info()
+    symbol_classes, trajectories = sub.get_info()
 
-    return video_tensor, icon_classes, trajectories
+    return video_tensor, symbol_classes, trajectories
 
 
-def generate_all_moving_icon_videos(pool, pool_seed, num_videos, num_frames, params, dataset_name):
+def generate_all_moving_symbol_videos(pool, pool_seed, num_videos, num_frames, params, dataset_name):
     print('Working on %s...' % dataset_name)
     output_dir = os.path.join(PROJ_ROOT_DIR, 'output')
     arg_tups = [(seed, num_frames, params) for seed in xrange(pool_seed, pool_seed+num_videos)]
     # Get list of V TxHxW(xC) videos
-    video_data = pool.map(generate_moving_icons_video, arg_tups)
-    videos, icon_classes, trajectories = zip(*video_data)
+    video_data = pool.map(generate_moving_symbols_video, arg_tups)
+    videos, symbol_classes, trajectories = zip(*video_data)
     videos = np.stack(videos, axis=0)  # V x T x H x W (x C)
-    icon_classes = np.stack(icon_classes, axis=0)  # V x D
+    symbol_classes = np.stack(symbol_classes, axis=0)  # V x D
     trajectories = np.stack(trajectories, axis=0)  # V x D x T x 2
     # Swap to bizarro Toronto dimensions (T x V x H x W (x C))
     videos = videos.swapaxes(0, 1)
     np.save(os.path.join(output_dir, '%s_videos.npy' % dataset_name), videos)
-    np.save(os.path.join(output_dir, '%s_icon_classes.npy' % dataset_name), icon_classes)
+    np.save(os.path.join(output_dir, '%s_symbol_classes.npy' % dataset_name), symbol_classes)
     np.save(os.path.join(output_dir, '%s_trajectories.npy' % dataset_name), trajectories)
 
 
@@ -188,10 +188,10 @@ def main():
     pool = multiprocessing.Pool()
     training_params, testing_params = get_param_dicts()
     for dataset_name, params in training_params.iteritems():
-        generate_all_moving_icon_videos(pool, pool_seed, num_training_videos, num_training_frames,
+        generate_all_moving_symbol_videos(pool, pool_seed, num_training_videos, num_training_frames,
                                         params, dataset_name)
     for dataset_name, params in testing_params.iteritems():
-        generate_all_moving_icon_videos(pool, pool_seed, num_testing_videos, num_testing_frames,
+        generate_all_moving_symbol_videos(pool, pool_seed, num_testing_videos, num_testing_frames,
                                         params, dataset_name)
 
 if __name__ == '__main__':

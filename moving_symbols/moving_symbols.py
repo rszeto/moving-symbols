@@ -10,11 +10,11 @@ import pymunk as pm
 import pymunk.pygame_util as pmu
 from PIL import Image
 
-from moving_icons_utils import merge_dicts, tight_crop, compute_pm_hull_vertices, \
+from moving_symbols_utils import merge_dicts, tight_crop, compute_pm_hull_vertices, \
     create_sine_fn, create_triangle_fn
 
 _COLLISION_TYPES = dict(
-    icon=0,
+    symbol=0,
     wall=1
 )
 
@@ -52,16 +52,16 @@ class ImageLoader:
         return image, image_path
 
 
-class Icon:
+class Symbol:
 
     def __init__(self, id, label, image, image_path, scale_fn):
         """Constructor
 
-        :param id: A numerical ID for this icon
-        :param label: The class label of this icon
-        :param image: The base PIL image for this icon
+        :param id: A numerical ID for this symbol
+        :param label: The class label of this symbol
+        :param image: The base PIL image for this symbol
         :param image_path: The path to the (unprocessed) image file
-        :param scale_fn: A function that returns the scale of the icon at any given time t
+        :param scale_fn: A function that returns the scale of the symbol at any given time t
         """
         self.id = id
         self.label = label
@@ -83,11 +83,11 @@ class Icon:
 
         # Set random things so objects interact properly
         self.shape.elasticity = 1.0
-        self.shape.collision_type = _COLLISION_TYPES['icon']
+        self.shape.collision_type = _COLLISION_TYPES['symbol']
 
 
     def get_render_image_and_position(self, screen_size):
-        """Get the PyGame Surface and center coordinate of the scaled, rotated icon.
+        """Get the PyGame Surface and center coordinate of the scaled, rotated symbol.
 
         :param screen_size: (width, height) of the PyGame screen
         :return:
@@ -109,7 +109,7 @@ class Icon:
 
 
     def set_scale(self, step):
-        """Set the scale of the icon to the scaling function at the given time step.
+        """Set the scale of the symbol to the scaling function at the given time step.
 
         :param step: The current time step of the environment
         :return:
@@ -120,21 +120,21 @@ class Icon:
 
 
     def get_state_message(self, step):
-        """Produce a message about the state of the icon at the given time step.
+        """Produce a message about the state of the symbol at the given time step.
 
-        Return a message containing information about the current pose and motion of the icon.
+        Return a message containing information about the current pose and motion of the symbol.
         Everything is a float except for id (int), position (np.float array with shape (2,)),
         and velocity (np.float array with shape (2,)).
 
-        :param step: The time step of the MovingIconEnvironment
+        :param step: The time step of the MovingSymbolEnvironment
         """
         dt = 0.001
         scale_velocity = (self.scale_fn(step + dt) - self.scale_fn(step)) / dt
         return dict(
             step=step,
-            type='icon_state',
+            type='symbol_state',
             meta=dict(
-                icon_id=self.id,
+                symbol_id=self.id,
                 position=np.array(self.body.position),
                 angle=self.body.angle,
                 scale=self.scale,
@@ -145,19 +145,19 @@ class Icon:
         )
 
     def get_init_message(self):
-        """Produce a message about fixed properties of the icon, i.e. image data
+        """Produce a message about fixed properties of the symbol, i.e. image data
 
         Return a message containing information required to reconstruct the appearance and shape
-        of the icon. The returned meta information includes the icon ID, the image as a HxWx4
-        np.uint8 array, the path to the source image, and the vertices of the icon shape,
+        of the symbol. The returned meta information includes the symbol ID, the image as a HxWx4
+        np.uint8 array, the path to the source image, and the vertices of the symbol shape,
         in PyMunk coordinates, as a Vx2 np.float array.
 
         """
         ret = dict(
             step=-1,
-            type='icon_init',
+            type='symbol_init',
             meta=dict(
-                icon_id=self.id,
+                symbol_id=self.id,
                 label=self.label,
                 image=np.array(self.image),
                 image_path=self.image_path,
@@ -167,10 +167,10 @@ class Icon:
         return ret
 
 
-class MovingIconEnvironment:
-    """Generator that produces Moving Icon video frames.
+class MovingSymbolsEnvironment:
+    """Generator that produces Moving Symbol video frames.
 
-    This class manages a physical environment in which icons move around. It also handles
+    This class manages a physical environment in which symbols move around. It also handles
     rendering of the current physical state. Renders are returned as PIL images, either in RGB or
     L (8-bit grayscale) mode.
 
@@ -181,10 +181,10 @@ class MovingIconEnvironment:
       folder for each split, e.g. "training" and "testing", and each split directory should
       contain folders for each class (e.g. 0, ..., 9 for MNIST digits).
     - split, str: Name of the data split to sample from
-    - num_icons, int: How many icons should appear in the video
+    - num_symbols, int: How many symbols should appear in the video
     - video_size, (int, int): The resolution of the video as (width, height)
     - color_output, bool: Whether to produce "RGB" color images or "L" grayscale images
-    - icon_labels, Sequence: The labels for the icon classes. These must be strings or ints (or
+    - symbol_labels, Sequence: The labels for the symbol classes. These must be strings or ints (or
       any object with __str__ implemented) that match the names of the folders in each split
       directory
     - scale_limits, (float, float): The minimum and maximum scale of an object relative to its
@@ -195,21 +195,21 @@ class MovingIconEnvironment:
       angular speed, in radians per frame
     - position_speed_limits, (float, float) or list of (float, float): The minimum and maximum
       translational speed, in pixels per frame
-    - interacting_icons, bool: Whether icons will bounce off each other
-    - scale_function_type, str: The class of function used to define the scale of each icon at
+    - interacting_symbols, bool: Whether symbols will bounce off each other
+    - scale_function_type, str: The class of function used to define the scale of each symbol at
       each time step. Supported options are:
       - "sine": Scale is determined by a sine wave
       - "triangle": Scale is determined by a triangle wave (i.e. scaling speed is constant,
         but switches directions if the digit gets too big or small)
-      - "constant": The icons do not change scale. Initial scale is randomly sampled from within
+      - "constant": The symbols do not change scale. Initial scale is randomly sampled from within
         scale_limits
-    - rotate_at_start, bool: Whether icons can start at a rotated angle
-    - rescale_at_start, bool: Whether icons can start at any scale in the specified range. If
-                              not. the scale of all icons is initialized to the middle of the
+    - rotate_at_start, bool: Whether symbols can start at a rotated angle
+    - rescale_at_start, bool: Whether symbols can start at any scale in the specified range. If
+                              not. the scale of all symbols is initialized to the middle of the
                               allowed scale range.
-    - lateral_motion_at_start, bool: Whether icons can only translate left/right/up/down to
-                                     start. If this is True, icons can only move non-laterally if
-                                     they bounce off of other icons.
+    - lateral_motion_at_start, bool: Whether symbols can only translate left/right/up/down to
+                                     start. If this is True, symbols can only move non-laterally if
+                                     they bounce off of other symbols.
 
     Additionally, debugging options can be given to the constructor. Below are the key-value
     pairs that can be specified:
@@ -222,15 +222,15 @@ class MovingIconEnvironment:
     DEFAULT_PARAMS = dict(
         data_dir='../data/mnist',
         split='training',
-        num_icons=1,
+        num_symbols=1,
         video_size=(64, 64),
         color_output=True,
-        icon_labels=[0],
+        symbol_labels=[0],
         scale_limits=(1.0, 1.0),
         scale_period_limits=(1, 1),
         rotation_speed_limits=(0, 0),
         position_speed_limits=(0, 0),
-        interacting_icons=False,
+        interacting_symbols=False,
         scale_function_type='constant',
         rotate_at_start=False,
         rescale_at_start=True,
@@ -249,7 +249,7 @@ class MovingIconEnvironment:
     def __init__(self, params, seed, fidelity=10, debug_options=None, initial_subscribers=[]):
         """Constructor
 
-        :param params: Parameters that define how icons behave and are rendered. See method
+        :param params: Parameters that define how symbols behave and are rendered. See method
         description for supported commands.
         :param seed: Seed for the RNG (int)
         :param fidelity: How many iterations to run in the physics simulator per step (int)
@@ -261,14 +261,14 @@ class MovingIconEnvironment:
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
                               - frame_rate, int: Frame rate of the debug visualization
-        :param initial_subscribers: list of AbstractMovingIconSubscribers that receive
+        :param initial_subscribers: list of AbstractMovingSymbolSubscribers that receive
                                     constructor messages
         """
 
-        self.params = merge_dicts(MovingIconEnvironment.DEFAULT_PARAMS, params)
+        self.params = merge_dicts(MovingSymbolsEnvironment.DEFAULT_PARAMS, params)
         self.fidelity = fidelity
         self.debug_options = None if debug_options is None \
-            else merge_dicts(MovingIconEnvironment.DEFAULT_DEBUG_OPTIONS, debug_options)
+            else merge_dicts(MovingSymbolsEnvironment.DEFAULT_DEBUG_OPTIONS, debug_options)
         self.video_size = self.params['video_size']
         self._subscribers = initial_subscribers
 
@@ -303,12 +303,14 @@ class MovingIconEnvironment:
             ))
 
         self._space = pm.Space()
-        self.icons = []
+        self.symbols = []
         image_loader = ImageLoader(os.path.join(self.params['data_dir'], self.params['split']),
                                    'tight_crop')
 
-        for id in xrange(self.params['num_icons']):
-            label = self.params['icon_labels'][np.random.randint(len(self.params['icon_labels']))]
+        for id in xrange(self.params['num_symbols']):
+            label = self.params['symbol_labels'][
+                np.random.randint(len(self.params['symbol_labels']))
+            ]
             image, image_path = image_loader.get_image(label)
 
             # Define the scale function
@@ -321,7 +323,7 @@ class MovingIconEnvironment:
             # Override offset if digits should not start at random scale
             if not self.params['rescale_at_start']:
                 x_offset = 0
-            # Randomly shift offset (i.e. icon can either grow or shrink at start)
+            # Randomly shift offset (i.e. symbol can either grow or shrink at start)
             x_offset += (period/2 if np.random.choice([True, False]) else 0)
             y_offset = (self.params['scale_limits'][1] + self.params['scale_limits'][0]) / 2.
             if self.params['scale_function_type'] == 'sine':
@@ -335,33 +337,33 @@ class MovingIconEnvironment:
                 raise ValueError('scale_function_type "%s" is unsupported'
                                  % self.params['scale_function_type'])
 
-            icon = Icon(id, label, image, image_path, scale_fn)
+            symbol = Symbol(id, label, image, image_path, scale_fn)
 
-            # Set the icon's initial rotation and scale
-            icon.set_scale(0)
+            # Set the symbol's initial rotation and scale
+            symbol.set_scale(0)
             start_angle = np.random.uniform(2 * math.pi)
             if self.params['rotate_at_start']:
-                icon.body.angle = start_angle
+                symbol.body.angle = start_angle
 
-            # Compute the minimum possible margin between the icon's center and the wall
+            # Compute the minimum possible margin between the symbol's center and the wall
             w_half = image.size[0] / 2.
             h_half = image.size[1] / 2.
             margin = math.sqrt(w_half ** 2 + h_half ** 2) * self.params['scale_limits'][1]
-            # Set the icon position at least one margin's distance from any wall
+            # Set the symbol position at least one margin's distance from any wall
             x_limits = (margin+1, self.video_size[0] - margin - 1)
             y_limits = (margin+1, self.video_size[1] - margin - 1)
-            icon.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
-            # If icons will interact with each other, make sure they don't overlap initially
-            while self.params['interacting_icons'] and len(self._space.shape_query(icon.shape)) > 0:
-                icon.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
+            symbol.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
+            # If symbols will interact with each other, make sure they don't overlap initially
+            while self.params['interacting_symbols'] and len(self._space.shape_query(symbol.shape)) > 0:
+                symbol.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
 
             # Set angular velocity
             rotation_speed_limit_index = np.random.choice(len(self.params['rotation_speed_limits']))
-            icon.body.angular_velocity = np.random.uniform(
+            symbol.body.angular_velocity = np.random.uniform(
                 *tuple(self.params['rotation_speed_limits'][rotation_speed_limit_index])
             )
-            icon.body.angular_velocity *= 1 if np.random.binomial(1, .5) else -1
-            icon.angular_velocity = icon.body.angular_velocity
+            symbol.body.angular_velocity *= 1 if np.random.binomial(1, .5) else -1
+            symbol.angular_velocity = symbol.body.angular_velocity
 
             # Set translational velocity
             sampled_velocity = np.random.uniform(-1, 1, 2)
@@ -376,24 +378,24 @@ class MovingIconEnvironment:
                     sampled_velocity = np.array([0, 1])
                 else:
                     sampled_velocity = np.array([-1, 0])
-            icon.body.velocity = sampled_velocity / np.linalg.norm(sampled_velocity)
+            symbol.body.velocity = sampled_velocity / np.linalg.norm(sampled_velocity)
             position_speed_limit_index = np.random.choice(len(self.params['position_speed_limits']))
-            icon.body.velocity *= np.random.uniform(
+            symbol.body.velocity *= np.random.uniform(
                 *tuple(self.params['position_speed_limits'][position_speed_limit_index])
             )
 
-            # Add icon to the space and environment
-            self._space.add(icon.body, icon.shape)
-            self.icons.append(icon)
+            # Add symbol to the space and environment
+            self._space.add(symbol.body, symbol.shape)
+            self.symbols.append(symbol)
 
-            # Publish message about the icon
-            self._publish_message(icon.get_init_message())
+            # Publish message about the symbol
+            self._publish_message(symbol.get_init_message())
 
         # Add walls
         self._add_walls()
         # Add collision handlers
         self._add_collision_handlers(
-            interacting_icons=self.params['interacting_icons']
+            interacting_symbols=self.params['interacting_symbols']
         )
         # Init step count
         self._step_count = 0
@@ -419,10 +421,10 @@ class MovingIconEnvironment:
 
 
     @staticmethod
-    def _icon_wall_pre_handler(arbiter, space, data):
-        """Remove angular velocity of the icon.
+    def _symbol_wall_pre_handler(arbiter, space, data):
+        """Remove angular velocity of the symbol.
 
-        This handler sets the angular velocity of the icon to zero, which prevents the physics
+        This handler sets the angular velocity of the symbol to zero, which prevents the physics
         simulation from adding kinetic energy due to rotation.
 
         :param arbiter:
@@ -439,11 +441,11 @@ class MovingIconEnvironment:
         return True
 
     @staticmethod
-    def _icon_wall_post_handler(arbiter, space, data):
-        """Restore angular velocity of the icon.
+    def _symbol_wall_post_handler(arbiter, space, data):
+        """Restore angular velocity of the symbol.
 
         This handler restores the angular velocity after the collision has been solved. It looks
-        up the fixed angular velocity from the Icon instance associated with the body in the
+        up the fixed angular velocity from the Symbol instance associated with the body in the
         collision.
 
         :param arbiter:
@@ -453,14 +455,14 @@ class MovingIconEnvironment:
         """
         if len(arbiter.contact_point_set.points) > 0:
             body = arbiter.shapes[0].body
-            body.angular_velocity = data['body_icon_map'][body].angular_velocity
+            body.angular_velocity = data['body_symbol_map'][body].angular_velocity
         return True
 
     @staticmethod
-    def _icon_icon_pre_handler(arbiter, space, data):
-        """Remove angular velocity of both icons.
+    def _symbol_symbol_pre_handler(arbiter, space, data):
+        """Remove angular velocity of both symbols.
 
-        This handler sets the angular velocity of each icon to zero, which prevents the physics
+        This handler sets the angular velocity of each symbol to zero, which prevents the physics
         simulation from adding kinetic energy due to rotation.
 
         :param arbiter:
@@ -477,11 +479,11 @@ class MovingIconEnvironment:
         return True
 
     @staticmethod
-    def _icon_icon_post_handler(arbiter, space, data):
-        """Restore angular velocity of both icons.
+    def _symbol_symbol_post_handler(arbiter, space, data):
+        """Restore angular velocity of both symbols.
 
         This handler restores the angular velocity after the collision has been solved. It looks
-        up the fixed angular velocity from the Icon instances associated with each body in the
+        up the fixed angular velocity from the Symbol instances associated with each body in the
         collision.
 
         :param arbiter:
@@ -491,20 +493,20 @@ class MovingIconEnvironment:
         """
         if len(arbiter.contact_point_set.points) > 0:
             for shape in arbiter.shapes:
-                shape.body.angular_velocity = data['body_icon_map'][shape.body].angular_velocity
+                shape.body.angular_velocity = data['body_symbol_map'][shape.body].angular_velocity
         return True
 
 
     @staticmethod
-    def _icon_wall_begin_handler(arbiter, space, data):
-        """Log the point where an icon first touches a wall.
+    def _symbol_wall_begin_handler(arbiter, space, data):
+        """Log the point where an symbol first touches a wall.
 
         :param arbiter:
         :param space:
         :param data:
         :return:
         """
-        icon_id = data['body_icon_map'][arbiter.shapes[0].body].id
+        symbol_id = data['body_symbol_map'][arbiter.shapes[0].body].id
 
         # Identify the wall that was hit based on the wall shape's normal
         wall_normal = arbiter.shapes[1].normal
@@ -521,7 +523,7 @@ class MovingIconEnvironment:
             step=data['mie']._step_count,
             type='hit_wall',
             meta=dict(
-                icon_id=icon_id,
+                symbol_id=symbol_id,
                 wall_label=wall_label
             )
         ))
@@ -529,14 +531,14 @@ class MovingIconEnvironment:
 
 
     @staticmethod
-    def _icon_icon_overlap_begin_handler(arbiter, space, data):
-        overlapping_icon_ids = (data['body_icon_map'][arbiter.shapes[0].body].id,
-                                data['body_icon_map'][arbiter.shapes[1].body].id)
+    def _symbol_symbol_overlap_begin_handler(arbiter, space, data):
+        overlapping_symbol_ids = (data['body_symbol_map'][arbiter.shapes[0].body].id,
+                                data['body_symbol_map'][arbiter.shapes[1].body].id)
         data['mie']._publish_message(dict(
             step=data['mie']._step_count,
             type='start_overlap',
             meta=dict(
-                icon_ids=overlapping_icon_ids
+                symbol_ids=overlapping_symbol_ids
             )
         ))
         # Don't call pre_solve or post_solve handlers (separate handler will still be called)
@@ -544,62 +546,64 @@ class MovingIconEnvironment:
 
 
     @staticmethod
-    def _icon_icon_overlap_separate_handler(arbiter, space, data):
-        overlapping_icon_ids = (data['body_icon_map'][arbiter.shapes[0].body].id,
-                                data['body_icon_map'][arbiter.shapes[1].body].id)
+    def _symbol_symbol_overlap_separate_handler(arbiter, space, data):
+        overlapping_symbol_ids = (data['body_symbol_map'][arbiter.shapes[0].body].id,
+                                data['body_symbol_map'][arbiter.shapes[1].body].id)
         data['mie']._publish_message(dict(
             step=data['mie']._step_count,
             type='end_overlap',
             meta=dict(
-                icon_ids=overlapping_icon_ids
+                symbol_ids=overlapping_symbol_ids
             )
         ))
         return True
 
 
-    def _add_collision_handlers(self, interacting_icons=False):
+    def _add_collision_handlers(self, interacting_symbols=False):
         """Add custom collision handlers in the PyMunk space.
 
         This method adds collision handlers to ensure that angular velocities do not affect
         translational speeds.
 
-        :param interacting_icons: Boolean for whether icons should bounce off each other
+        :param interacting_symbols: Boolean for whether symbols should bounce off each other
         :return:
         """
-        # Define the icon-wall handler
-        body_icon_map = {icon.body: icon for icon in self.icons}
-        h = self._space.add_collision_handler(_COLLISION_TYPES['icon'], _COLLISION_TYPES['wall'])
-        h.begin = MovingIconEnvironment._icon_wall_begin_handler
-        h.pre_solve = MovingIconEnvironment._icon_wall_pre_handler
-        h.post_solve = MovingIconEnvironment._icon_wall_post_handler
-        h.data['body_icon_map'] = body_icon_map
+        # Define the symbol-wall handler
+        body_symbol_map = {symbol.body: symbol for symbol in self.symbols}
+        h = self._space.add_collision_handler(_COLLISION_TYPES['symbol'], _COLLISION_TYPES['wall'])
+        h.begin = MovingSymbolsEnvironment._symbol_wall_begin_handler
+        h.pre_solve = MovingSymbolsEnvironment._symbol_wall_pre_handler
+        h.post_solve = MovingSymbolsEnvironment._symbol_wall_post_handler
+        h.data['body_symbol_map'] = body_symbol_map
         h.data['mie'] = self
 
-        # Define the icon-icon handler
-        h = self._space.add_collision_handler(_COLLISION_TYPES['icon'], _COLLISION_TYPES['icon'])
-        h.data['body_icon_map'] = body_icon_map
+        # Define the symbol-symbol handler
+        h = self._space.add_collision_handler(
+            _COLLISION_TYPES['symbol'], _COLLISION_TYPES['symbol']
+        )
+        h.data['body_symbol_map'] = body_symbol_map
         h.data['mie'] = self
-        if interacting_icons:
-            h.pre_solve = MovingIconEnvironment._icon_icon_pre_handler
-            h.post_solve = MovingIconEnvironment._icon_icon_post_handler
+        if interacting_symbols:
+            h.pre_solve = MovingSymbolsEnvironment._symbol_symbol_pre_handler
+            h.post_solve = MovingSymbolsEnvironment._symbol_symbol_post_handler
         else:
-            h.begin = MovingIconEnvironment._icon_icon_overlap_begin_handler
-            h.separate = MovingIconEnvironment._icon_icon_overlap_separate_handler
+            h.begin = MovingSymbolsEnvironment._symbol_symbol_overlap_begin_handler
+            h.separate = MovingSymbolsEnvironment._symbol_symbol_overlap_separate_handler
 
         # TODO: Also add handlers that log events
 
 
     def _step(self):
-        """Update the positions, scales, and rotations of each icon."""
-        # First, publish messages about current icon states
-        for icon in self.icons:
-            self._publish_message(icon.get_state_message(self._step_count))
+        """Update the positions, scales, and rotations of each symbol."""
+        # First, publish messages about current symbol states
+        for symbol in self.symbols:
+            self._publish_message(symbol.get_state_message(self._step_count))
         # Now walk through simulation
         self._step_count += 1
-        # Update scale of each icon
-        for icon in self.icons:
-            icon.set_scale(self._step_count)
-        # Take several partial steps in the simulator to stop icons from phasing through objects
+        # Update scale of each symbol
+        for symbol in self.symbols:
+            symbol.set_scale(self._step_count)
+        # Take several partial steps in the simulator to stop symbols from phasing through objects
         for _ in xrange(self.fidelity):
             self._space.step(1 / float(self.fidelity))
 
@@ -623,16 +627,16 @@ class MovingIconEnvironment:
         if self.debug_options['show_pymunk_debug']:
             self._space.debug_draw(self._pg_draw_options)
 
-        # Draw each icon
-        for icon in self.icons:
-            rotated_image, pg_image_pos = icon.get_render_image_and_position(self.video_size)
+        # Draw each symbol
+        for symbol in self.symbols:
+            rotated_image, pg_image_pos = symbol.get_render_image_and_position(self.video_size)
             self._pg_screen.blit(rotated_image, pg_image_pos)
 
         # Draw polygon outline on top
         if self.debug_options['show_bounding_poly']:
-            for icon in self.icons:
-                ps = [p.rotated(icon.body.angle) + icon.body.position
-                      for p in icon.shape.get_vertices()]
+            for symbol in self.symbols:
+                ps = [p.rotated(symbol.body.angle) + symbol.body.position
+                      for p in symbol.shape.get_vertices()]
                 ps = [(p.x, self.video_size[1] - p.y) for p in ps]
                 ps += [ps[0]]
                 pg.draw.lines(self._pg_screen, pg.color.THECOLORS['red'], False, ps, 1)
@@ -662,17 +666,17 @@ class MovingIconEnvironment:
         """
         ret = np.zeros((self.video_size[1], self.video_size[0], 3), dtype=np.float32)
 
-        for x, icon in enumerate(self.icons):
-            angle = icon.body.angle
-            scale = icon.scale
-            position = (icon.body.position[0], self.video_size[1] - icon.body.position[1])
-            width, height = icon.image.size
+        for x, symbol in enumerate(self.symbols):
+            angle = symbol.body.angle
+            scale = symbol.scale
+            position = (symbol.body.position[0], self.video_size[1] - symbol.body.position[1])
+            width, height = symbol.image.size
 
             M = cv2.getRotationMatrix2D((width/2., height/2.), math.degrees(angle), scale)
             M[0, 2] += position[0] - width/2.
             M[1, 2] += position[1] - height/2.
 
-            overlay = cv2.warpAffine(np.array(icon.image), M, self.video_size) / 255.
+            overlay = cv2.warpAffine(np.array(symbol.image), M, self.video_size) / 255.
             alpha = np.stack([overlay[:, :, 3] for _ in xrange(3)], axis=2)
             ret = (1 - alpha) * ret + alpha * overlay[:, :, :3]
 
@@ -698,10 +702,10 @@ class MovingIconEnvironment:
     def add_subscriber(self, subscriber):
         """Add a subscriber to published messages
 
-        :param subscriber: An AbstractMovingIconSubscriber instance
+        :param subscriber: An AbstractMovingSymbolSubscriber instance
         :return:
         """
-        assert(isinstance(subscriber, AbstractMovingIconSubscriber))
+        assert(isinstance(subscriber, AbstractMovingSymbolsSubscriber))
         self._subscribers.append(subscriber)
 
 
@@ -732,7 +736,7 @@ class MovingIconEnvironment:
     ### END GENERATOR METHODS ###
 
 
-class AbstractMovingIconSubscriber:
+class AbstractMovingSymbolsSubscriber:
     __metaclass__ = ABCMeta
 
     @abstractmethod

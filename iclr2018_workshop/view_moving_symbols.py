@@ -47,7 +47,7 @@ def main():
     # Select file path (https://stackoverflow.com/a/3579625)
     Tk().withdraw()
     filename = askopenfilename(initialdir=os.path.join(PROJ_ROOT_DIR, 'output'),
-                               title='Select one of the Moving Icons files')
+                               title='Select one of the Moving Symbols files')
     if not filename: exit()
     # Check the file is one of the valid files
     m = re.search('(.+?)(_videos.npy$)', filename)
