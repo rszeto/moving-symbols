@@ -1,6 +1,10 @@
 # Moving Symbols
 
-Description of Moving Symbols.
+*Ryan Szeto*
+
+Moving Symbols is a Python package that lets you generate videos of moving images in an extremely
+flexible manner. You can specify your own parameters for the translation, rotation, and scaling
+speeds of images, and even use your own image datasets!
 
 ## Environment
 
