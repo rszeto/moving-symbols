@@ -189,7 +189,7 @@ class Symbol:
 
 
 class MovingSymbolsEnvironment:
-    """Generator that produces Moving Symbol video frames.
+    """Generator that produces Moving %Symbol video frames.
 
     This class manages a physical environment in which symbols move around. It also handles
     rendering of the current physical state. Renders are returned as PIL images, either in RGB or
@@ -717,7 +717,8 @@ class MovingSymbolsEnvironment:
 
 
     def add_subscriber(self, subscriber):
-        """Add a subscriber of published messages.
+        """Add a subscriber of published messages. The subscriber must have a callable
+        "process_message" method.
 
         @param subscriber: An object with a callable "process_message" method
         """

@@ -228,7 +228,7 @@ Public Attributes</h2></td></tr>
 <p>Return a message containing information required to reconstruct the appearance and shape of the symbol. The returned meta information includes the symbol ID, the image as a HxWx4 np.uint8 array, the path to the source image, and the vertices of the symbol shape, in PyMunk coordinates, as a Vx2 np.float array.</p>
 <dl class="retval"><dt>Return values</dt><dd>
   <table class="retval">
-    <tr><td class="paramname">message</td><td>A dict (consumable by an AbstractMovingSymbolSubscriber) describing the symbol's initial state. Its key-value pairs are:<ul>
+    <tr><td class="paramname">message</td><td>A dict describing the symbol's initial state. Its key-value pairs are:<ul>
 <li>step: Current time step</li>
 <li>type: 'symbol_init'</li>
 <li>meta: dict with following key-value pairs:<ul>
@@ -322,7 +322,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="retval"><dt>Return values</dt><dd>
   <table class="retval">
-    <tr><td class="paramname">message</td><td>A dict (consumable by an AbstractMovingSymbolSubscriber) describing the symbol's state. Its key-value pairs are:<ul>
+    <tr><td class="paramname">message</td><td>A dict describing the symbol's state. Its key-value pairs are:<ul>
 <li>step: Current time step</li>
 <li>type: 'symbol_state'</li>
 <li>meta: dict with following key-value pairs:<ul>

@@ -1,1 +1,1 @@
-from moving_symbols import ImageLoader, MovingSymbolsEnvironment
+from moving_symbols import MovingSymbolsEnvironment

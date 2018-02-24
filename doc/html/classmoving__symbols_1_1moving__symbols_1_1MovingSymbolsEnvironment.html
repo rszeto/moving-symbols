@@ -96,7 +96,7 @@ var searchBox = new SearchBox("searchBox", "search",false,'Search');
 </div><!--header-->
 <div class="contents">
 
-<p>Generator that produces Moving <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a> video frames.  
+<p>Generator that produces Moving Symbol video frames.  
  <a href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="pub-methods"></a>
@@ -152,7 +152,7 @@ Static Public Attributes</h2></td></tr>
 <tr class="separator:a521f8c7949d1cfc75b3981b0a23f74b9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Generator that produces Moving <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a> video frames. </p>
+<div class="textblock"><p>Generator that produces Moving Symbol video frames. </p>
 <p>This class manages a physical environment in which symbols move around. It also handles rendering of the current physical state. Renders are returned as PIL images, either in RGB or L (8-bit grayscale) mode. It implements the native Python generator interface.</p>
 <p>The physical state is initialized based on the parameters given to the constructor (default values are supplied by DEFAULT_PARAMS). Below are the key-value pairs that can be specified:</p>
 <ul>
@@ -240,7 +240,7 @@ Static Public Attributes</h2></td></tr>
 <li>frame_rate, int: Frame rate of the debug visualization </li>
 </ul>
 </td></tr>
-    <tr><td class="paramname">initial_subscribers</td><td>list of AbstractMovingSymbolSubscribers that receive constructor messages </td></tr>
+    <tr><td class="paramname">initial_subscribers</td><td>list of subscribers to receive constructor messages. Each object in the list must have a "process_message" method. </td></tr>
   </table>
   </dd>
 </dl>
@@ -273,6 +273,7 @@ Static Public Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Add a subscriber of published messages. </p>
+<p>The subscriber must have a callable "process_message" method.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">subscriber</td><td>An object with a callable "process_message" method </td></tr>
