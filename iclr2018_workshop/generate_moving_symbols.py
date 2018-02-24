@@ -14,10 +14,10 @@ import numpy as np
 PROJ_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJ_ROOT_DIR)
 
-from moving_symbols import MovingSymbolsEnvironment, AbstractMovingSymbolsSubscriber
+from moving_symbols import MovingSymbolsEnvironment
 
 
-class MovingSymbolsClassTrajectoryTracker(AbstractMovingSymbolsSubscriber):
+class MovingSymbolsClassTrajectoryTracker:
     """Object that gets the symbol classes and trajectories of the generated video"""
 
     def __init__(self):

@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['imageloader',['ImageLoader',['../classmoving__symbols_1_1moving__symbols_1_1ImageLoader.html',1,'moving_symbols::moving_symbols']]]
+  ['movingsymbolsenvironment',['MovingSymbolsEnvironment',['../classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html',1,'moving_symbols::moving_symbols']]]
 ];

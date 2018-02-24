@@ -1,4 +1,3 @@
-from abc import ABCMeta, abstractmethod
 import math
 import os
 import sys
@@ -128,8 +127,7 @@ class Symbol:
         and velocity (np.float array with shape (2,)).
 
         @param step: The time step of the MovingSymbolEnvironment
-        @retval message: A dict (consumable by an AbstractMovingSymbolSubscriber) describing the
-                         symbol's state. Its key-value pairs are:
+        @retval message: A dict describing the symbol's state. Its key-value pairs are:
                          - step: Current time step
                          - type: 'symbol_state'
                          - meta: dict with following key-value pairs:
@@ -165,8 +163,7 @@ class Symbol:
         np.uint8 array, the path to the source image, and the vertices of the symbol shape,
         in PyMunk coordinates, as a Vx2 np.float array.
 
-        @retval message: A dict (consumable by an AbstractMovingSymbolSubscriber) describing the
-                         symbol's initial state. Its key-value pairs are:
+        @retval message: A dict describing the symbol's initial state. Its key-value pairs are:
                          - step: Current time step
                          - type: 'symbol_init'
                          - meta: dict with following key-value pairs:
@@ -278,8 +275,8 @@ class MovingSymbolsEnvironment:
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
                               - frame_rate, int: Frame rate of the debug visualization
-        @param initial_subscribers: list of AbstractMovingSymbolSubscribers that receive
-                                    constructor messages
+        @param initial_subscribers: list of subscribers to receive constructor messages. Each object
+                                    in the list must have a "process_message" method.
         """
 
         self.params = merge_dicts(MovingSymbolsEnvironment.DEFAULT_PARAMS, params)
@@ -287,7 +284,10 @@ class MovingSymbolsEnvironment:
         self.debug_options = None if debug_options is None \
             else merge_dicts(MovingSymbolsEnvironment.DEFAULT_DEBUG_OPTIONS, debug_options)
         self.video_size = self.params['video_size']
-        self._subscribers = initial_subscribers
+
+        self._subscribers = []
+        for subscriber in initial_subscribers:
+            self.add_subscriber(subscriber)
 
         self._publish_message(dict(
             step=-1,
@@ -717,11 +717,14 @@ class MovingSymbolsEnvironment:
 
 
     def add_subscriber(self, subscriber):
-        """Add a subscriber to published messages
+        """Add a subscriber of published messages.
 
-        @param subscriber: An AbstractMovingSymbolSubscriber instance
+        @param subscriber: An object with a callable "process_message" method
         """
-        assert(isinstance(subscriber, AbstractMovingSymbolsSubscriber))
+        process_message_fn = getattr(subscriber, 'process_message', None)
+        if not callable(process_message_fn):
+            raise ValueError('The given subscriber does not have a "process_message" method')
+
         self._subscribers.append(subscriber)
 
 
@@ -750,11 +753,3 @@ class MovingSymbolsEnvironment:
         else:
             raise RuntimeError('Generator ignored GeneratorExit')
     """END GENERATOR METHODS"""
-
-
-class AbstractMovingSymbolsSubscriber:
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def process_message(self, message):
-        pass

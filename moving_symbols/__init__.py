@@ -1,1 +1,1 @@
-from moving_symbols import ImageLoader, MovingSymbolsEnvironment, AbstractMovingSymbolsSubscriber
+from moving_symbols import ImageLoader, MovingSymbolsEnvironment
