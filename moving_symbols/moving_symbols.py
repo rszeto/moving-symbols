@@ -22,10 +22,10 @@ _COLLISION_TYPES = dict(
 class ImageLoader:
 
     def __init__(self, root, mode):
-        """Constructor
+        """
 
-        :param root: The path to the root directory containing all images.
-        :param mode: String that indicates how to transform the image for rendering. Options
+        @param root: The path to the root directory containing all images.
+        @param mode: String that indicates how to transform the image for rendering. Options
         include "tight_crop".
         """
 
@@ -38,8 +38,9 @@ class ImageLoader:
 
         The image is pre-processed based on the ImageLoader's mode.
 
-        :param label: The label of the class to sample from
-        :return:
+        @param label: The label of the class to sample from
+        @retval image: A PIL Image from the given label set
+        @retval image_path: The path to the selected image
         """
 
         class_path = os.path.join(self.root, str(label))
@@ -57,11 +58,11 @@ class Symbol:
     def __init__(self, id, label, image, image_path, scale_fn):
         """Constructor
 
-        :param id: A numerical ID for this symbol
-        :param label: The class label of this symbol
-        :param image: The base PIL image for this symbol
-        :param image_path: The path to the (unprocessed) image file
-        :param scale_fn: A function that returns the scale of the symbol at any given time t
+        @param id: A numerical ID for this symbol
+        @param label: The class label of this symbol
+        @param image: The base PIL image for this symbol
+        @param image_path: The path to the (unprocessed) image file
+        @param scale_fn: A function that returns the scale of the symbol at any given time t
         """
         self.id = id
         self.label = label
@@ -89,8 +90,9 @@ class Symbol:
     def get_render_image_and_position(self, screen_size):
         """Get the PyGame Surface and center coordinate of the scaled, rotated symbol.
 
-        :param screen_size: (width, height) of the PyGame screen
-        :return:
+        @param screen_size: (width, height) of the PyGame screen
+        @retval rotated_image: pygame.Surface of the scaled, rotated image
+        @retval pg_image_pos: PyGame coordinates of the scaled, rotated image
         """
         # Get scaled image
         scaled_image = pg.transform.smoothscale(
@@ -111,8 +113,7 @@ class Symbol:
     def set_scale(self, step):
         """Set the scale of the symbol to the scaling function at the given time step.
 
-        :param step: The current time step of the environment
-        :return:
+        @param step: The current time step of the environment
         """
         self.scale = self.scale_fn(step)
         self.shape.unsafe_set_vertices(self._base_vertices,
@@ -126,7 +127,19 @@ class Symbol:
         Everything is a float except for id (int), position (np.float array with shape (2,)),
         and velocity (np.float array with shape (2,)).
 
-        :param step: The time step of the MovingSymbolEnvironment
+        @param step: The time step of the MovingSymbolEnvironment
+        @retval message: A dict (consumable by an AbstractMovingSymbolSubscriber) describing the
+                         symbol's state. Its key-value pairs are:
+                         - step: Current time step
+                         - type: 'symbol_state'
+                         - meta: dict with following key-value pairs:
+                            - symbol_id: The ID for this symbol
+                            - position: The symbol's PyGame coordinates as an np.array
+                            - angle: The symbol's PyGame angle
+                            - scale: The symbol's scale
+                            - velocity: The symbol's PyGame velocity as an np.array
+                            - angular_velocity: The symbol's angular velocity
+                            - scale_velocity: The symbol's scale velocity
         """
         dt = 0.001
         scale_velocity = (self.scale_fn(step + dt) - self.scale_fn(step)) / dt
@@ -145,13 +158,24 @@ class Symbol:
         )
 
     def get_init_message(self):
-        """Produce a message about fixed properties of the symbol, i.e. image data
+        """Produce a message about fixed properties of the symbol, i.e.\ image data.
 
         Return a message containing information required to reconstruct the appearance and shape
         of the symbol. The returned meta information includes the symbol ID, the image as a HxWx4
         np.uint8 array, the path to the source image, and the vertices of the symbol shape,
         in PyMunk coordinates, as a Vx2 np.float array.
 
+        @retval message: A dict (consumable by an AbstractMovingSymbolSubscriber) describing the
+                         symbol's initial state. Its key-value pairs are:
+                         - step: Current time step
+                         - type: 'symbol_init'
+                         - meta: dict with following key-value pairs:
+                            - symbol_id: The ID for this symbol
+                            - label: The class label of this symbol
+                            - image: An np.array of the full image (dimensions H x W x 4)
+                            - image_path: Path to the source image (uncropped)
+                            - vertices: The PyMunk coordinates defining the symbol's hitbox as a
+                              V x 2 np.float array
         """
         ret = dict(
             step=-1,
@@ -172,51 +196,44 @@ class MovingSymbolsEnvironment:
 
     This class manages a physical environment in which symbols move around. It also handles
     rendering of the current physical state. Renders are returned as PIL images, either in RGB or
-    L (8-bit grayscale) mode.
+    L (8-bit grayscale) mode. It implements the native Python generator interface.
 
-    The physical state is initialized based on the parameters given to the constructor. Below are
-    the key-value pairs that can be specified:
+    The physical state is initialized based on the parameters given to the constructor (default
+    values are supplied by DEFAULT_PARAMS). Below are the key-value pairs that can be specified:
 
-    - data_dir, str: Path to the dataset directory. The dataset directory should contain one
+    - **data_dir, str**: Path to the dataset directory. The dataset directory should contain one
       folder for each split, e.g. "training" and "testing", and each split directory should
       contain folders for each class (e.g. 0, ..., 9 for MNIST digits).
-    - split, str: Name of the data split to sample from
-    - num_symbols, int: How many symbols should appear in the video
-    - video_size, (int, int): The resolution of the video as (width, height)
-    - color_output, bool: Whether to produce "RGB" color images or "L" grayscale images
-    - symbol_labels, Sequence: The labels for the symbol classes. These must be strings or ints (or
-      any object with __str__ implemented) that match the names of the folders in each split
-      directory
-    - scale_limits, (float, float): The minimum and maximum scale of an object relative to its
+    - **split, str**: Name of the data split to sample from
+    - **num_symbols, int**: How many symbols should appear in the video
+    - **video_size, (int, int)**: The resolution of the video as (width, height)
+    - **color_output, bool**: Whether to produce "RGB" color images or "L" grayscale images
+    - **symbol_labels, Sequence**: The labels for the symbol classes. These must be strings or
+      ints (or any object with __str__ implemented) that match the names of the folders in each
+      split directory
+    - **scale_limits, (float, float)**: The minimum and maximum scale of an object relative to its
       original size
-    - scale_period_limits, (float, float) or list of (float, float): The minimum and maximum
+    - **scale_period_limits, (float, float) or list of (float, float)**: The minimum and maximum
       duration of a full scale cycle in number of frames
-    - rotation_speed_limits, (float, float) or list of (float, float): The minimum and maximum
+    - **rotation_speed_limits, (float, float) or list of (float, float)**: The minimum and maximum
       angular speed, in radians per frame
-    - position_speed_limits, (float, float) or list of (float, float): The minimum and maximum
+    - **position_speed_limits, (float, float) or list of (float, float)**: The minimum and maximum
       translational speed, in pixels per frame
-    - interacting_symbols, bool: Whether symbols will bounce off each other
-    - scale_function_type, str: The class of function used to define the scale of each symbol at
+    - **interacting_symbols, bool**: Whether symbols will bounce off each other
+    - **scale_function_type, str**: The class of function used to define the scale of each symbol at
       each time step. Supported options are:
       - "sine": Scale is determined by a sine wave
       - "triangle": Scale is determined by a triangle wave (i.e. scaling speed is constant,
         but switches directions if the digit gets too big or small)
-      - "constant": The symbols do not change scale. Initial scale is randomly sampled from within
-        scale_limits
-    - rotate_at_start, bool: Whether symbols can start at a rotated angle
-    - rescale_at_start, bool: Whether symbols can start at any scale in the specified range. If
+      - "constant": The symbols do not change scale. Initial scale is randomly sampled from
+        within scale_limits
+    - **rotate_at_start, bool**: Whether symbols can start at a rotated angle
+    - **rescale_at_start, bool**: Whether symbols can start at any scale in the specified range. If
                               not. the scale of all symbols is initialized to the middle of the
                               allowed scale range.
-    - lateral_motion_at_start, bool: Whether symbols can only translate left/right/up/down to
+    - **lateral_motion_at_start, bool**: Whether symbols can only translate left/right/up/down to
                                      start. If this is True, symbols can only move non-laterally if
                                      they bounce off of other symbols.
-
-    Additionally, debugging options can be given to the constructor. Below are the key-value
-    pairs that can be specified:
-
-    - frame_number_font_size: How large to make the frame count text
-    - show_pymunk_debug: Draw objects with PyMunk's built-in rendering function
-    - show_bounding_poly: Draw a polygon
     """
 
     DEFAULT_PARAMS = dict(
@@ -249,19 +266,19 @@ class MovingSymbolsEnvironment:
     def __init__(self, params, seed, fidelity=10, debug_options=None, initial_subscribers=[]):
         """Constructor
 
-        :param params: Parameters that define how symbols behave and are rendered. See method
-        description for supported commands.
-        :param seed: Seed for the RNG (int)
-        :param fidelity: How many iterations to run in the physics simulator per step (int)
-        :param debug_options: dict with options for visual debugging. The following key-value
-                              pairs are supported:
+        @param params: dict of parameters that define how symbols behave and are rendered. See the
+        detailed description for this class for supported parameters.
+        @param seed: Seed for the RNG (int)
+        @param fidelity: How many iterations to run in the physics simulator per step (int)
+        @param debug_options: dict with options for visual debugging, or None if visual debugging
+                              should be turned off. The following key-value pairs are supported:
                               - show_pymunk_debug, bool: Whether to use PyMunk's default drawing
                                 function
                               - show_bounding_poly, bool: Whether to render PyMunk surface outlines
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
                               - frame_rate, int: Frame rate of the debug visualization
-        :param initial_subscribers: list of AbstractMovingSymbolSubscribers that receive
+        @param initial_subscribers: list of AbstractMovingSymbolSubscribers that receive
                                     constructor messages
         """
 
@@ -427,10 +444,10 @@ class MovingSymbolsEnvironment:
         This handler sets the angular velocity of the symbol to zero, which prevents the physics
         simulation from adding kinetic energy due to rotation.
 
-        :param arbiter:
-        :param space:
-        :param data:
-        :return:
+        @param arbiter:
+        @param space:
+        @param data:
+        @retval:
         """
         set_ = arbiter.contact_point_set
         if len(arbiter.contact_point_set.points) > 0:
@@ -448,10 +465,10 @@ class MovingSymbolsEnvironment:
         up the fixed angular velocity from the Symbol instance associated with the body in the
         collision.
 
-        :param arbiter:
-        :param space:
-        :param data:
-        :return:
+        @param arbiter:
+        @param space:
+        @param data:
+        @retval:
         """
         if len(arbiter.contact_point_set.points) > 0:
             body = arbiter.shapes[0].body
@@ -465,10 +482,10 @@ class MovingSymbolsEnvironment:
         This handler sets the angular velocity of each symbol to zero, which prevents the physics
         simulation from adding kinetic energy due to rotation.
 
-        :param arbiter:
-        :param space:
-        :param data:
-        :return:
+        @param arbiter:
+        @param space:
+        @param data:
+        @retval:
         """
         set_ = arbiter.contact_point_set
         if len(arbiter.contact_point_set.points) > 0:
@@ -486,10 +503,10 @@ class MovingSymbolsEnvironment:
         up the fixed angular velocity from the Symbol instances associated with each body in the
         collision.
 
-        :param arbiter:
-        :param space:
-        :param data:
-        :return:
+        @param arbiter:
+        @param space:
+        @param data:
+        @retval:
         """
         if len(arbiter.contact_point_set.points) > 0:
             for shape in arbiter.shapes:
@@ -501,10 +518,10 @@ class MovingSymbolsEnvironment:
     def _symbol_wall_begin_handler(arbiter, space, data):
         """Log the point where an symbol first touches a wall.
 
-        :param arbiter:
-        :param space:
-        :param data:
-        :return:
+        @param arbiter:
+        @param space:
+        @param data:
+        @retval:
         """
         symbol_id = data['body_symbol_map'][arbiter.shapes[0].body].id
 
@@ -565,8 +582,8 @@ class MovingSymbolsEnvironment:
         This method adds collision handlers to ensure that angular velocities do not affect
         translational speeds.
 
-        :param interacting_symbols: Boolean for whether symbols should bounce off each other
-        :return:
+        @param interacting_symbols: Boolean for whether symbols should bounce off each other
+        @retval:
         """
         # Define the symbol-wall handler
         body_symbol_map = {symbol.body: symbol for symbol in self.symbols}
@@ -615,7 +632,7 @@ class MovingSymbolsEnvironment:
         collision meshes and draws images at integer locations, so it should NOT be used to
         obtain the final render.
 
-        :return: Image (RGB format)
+        @retval: Image (RGB format)
         """
         if self.debug_options is None:
             raise RuntimeError('_render_pg cannot be called since no debug options were given.')
@@ -662,7 +679,7 @@ class MovingSymbolsEnvironment:
         final render. It outputs a PIL Image in either "RGB" or "L" mode depending on the value
         of the "color_output" flag specified in the constructor parameters.
 
-        :return: Image (RGB or L format)
+        @retval: Image (RGB or L format)
         """
         ret = np.zeros((self.video_size[1], self.video_size[0], 3), dtype=np.float32)
 
@@ -691,8 +708,8 @@ class MovingSymbolsEnvironment:
     def _publish_message(self, message):
         """Publish a message to any subscribers
 
-        :param message: Dict of information to publish
-        :return:
+        @param message: Dict of information to publish
+        @retval:
         """
         assert(isinstance(message, dict))
         for subscriber in self._subscribers:
@@ -702,14 +719,13 @@ class MovingSymbolsEnvironment:
     def add_subscriber(self, subscriber):
         """Add a subscriber to published messages
 
-        :param subscriber: An AbstractMovingSymbolSubscriber instance
-        :return:
+        @param subscriber: An AbstractMovingSymbolSubscriber instance
         """
         assert(isinstance(subscriber, AbstractMovingSymbolsSubscriber))
         self._subscribers.append(subscriber)
 
 
-    ### GENERATOR METHODS ###
+    """GENERATOR METHODS"""
     def send(self, _):
         if self.debug_options is not None:
             self._render_pg()
@@ -733,7 +749,7 @@ class MovingSymbolsEnvironment:
             pass
         else:
             raise RuntimeError('Generator ignored GeneratorExit')
-    ### END GENERATOR METHODS ###
+    """END GENERATOR METHODS"""
 
 
 class AbstractMovingSymbolsSubscriber:
