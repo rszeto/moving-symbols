@@ -231,6 +231,12 @@ class MovingSymbolsEnvironment:
     - **lateral_motion_at_start, bool**: Whether symbols can only translate left/right/up/down to
                                      start. If this is True, symbols can only move non-laterally if
                                      they bounce off of other symbols.
+    - **background_data_dir, str**: Path to the background directory. This directory should contain
+      one folder for each split, e.g. "training" and "testing", and each split directory should
+      contain folders for each class. If you do not set both this and `background_labels`,
+      then all videos will have solid black backgrounds.
+    - **background_labels, list of str**: The labels for the background classes. If you do not
+      set both this and `background_data_dir`, then all videos will have solid black backgrounds.
     """
 
     DEFAULT_PARAMS = dict(
@@ -248,7 +254,9 @@ class MovingSymbolsEnvironment:
         scale_function_type='constant',
         rotate_at_start=False,
         rescale_at_start=True,
-        lateral_motion_at_start=False
+        lateral_motion_at_start=False,
+        background_data_dir=None,
+        background_labels=None
     )
 
     DEFAULT_DEBUG_OPTIONS = dict(
@@ -416,6 +424,22 @@ class MovingSymbolsEnvironment:
         )
         # Init step count
         self._step_count = 0
+
+        # Set background image
+        self.background = Image.fromarray(np.zeros((self.video_size[0], self.video_size[1], 3),
+                                                   dtype=np.uint8))
+        bg_data_dir = self.params['background_data_dir']
+        bg_labels = self.params['background_labels']
+        if bg_data_dir is not None and bg_labels is not None:
+            # Choose a category
+            category_name = bg_labels[np.random.randint(len(bg_labels))]
+            # Choose an image
+            dir = os.path.join(bg_data_dir, self.params['split'], category_name)
+            file_name = os.listdir(dir)[np.random.randint(len(os.listdir(dir)))]
+            full_image_path = os.path.join(dir, file_name)
+            bg_image = Image.open(full_image_path)
+            # Anchor top-left corner of background to top-left corner of frame
+            self.background.paste(bg_image)
 
 
     def _add_walls(self):
@@ -637,8 +661,10 @@ class MovingSymbolsEnvironment:
         if self.debug_options is None:
             raise RuntimeError('_render_pg cannot be called since no debug options were given.')
 
-        # Use black background
-        self._pg_screen.fill(pg.color.THECOLORS['black'])
+        # Draw background image
+        bg_sprite = pg.image.fromstring(self.background.tobytes(), self.background.size,
+                                        self.background.mode)
+        self._pg_screen.blit(bg_sprite, (0, 0))
 
         # Use PyMunk's default drawing function (guaranteed correctness)
         if self.debug_options['show_pymunk_debug']:
@@ -681,7 +707,7 @@ class MovingSymbolsEnvironment:
 
         @retval: Image (RGB or L format)
         """
-        ret = np.zeros((self.video_size[1], self.video_size[0], 3), dtype=np.float32)
+        ret = np.array(self.background, dtype=np.float32) / 255.
 
         for x, symbol in enumerate(self.symbols):
             angle = symbol.body.angle
