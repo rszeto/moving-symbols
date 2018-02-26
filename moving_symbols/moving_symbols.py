@@ -1,6 +1,7 @@
 import math
 import os
 import sys
+from warnings import warn
 
 import cv2
 import numpy as np
@@ -315,7 +316,7 @@ class MovingSymbolsEnvironment:
     )
 
 
-    def __init__(self, params, seed, fidelity=10, debug_options=None, initial_subscribers=[]):
+    def __init__(self, params, seed, fidelity=10, debug_options=None, initial_subscribers=None):
         """Constructor
 
         @param params: dict of parameters that define how symbols behave and are rendered. See the
@@ -330,7 +331,9 @@ class MovingSymbolsEnvironment:
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
                               - frame_rate, int: Frame rate of the debug visualization
-        @param initial_subscribers: list of subscribers to receive constructor messages. Each object
+        @param initial_subscribers: **THIS IS DEPRECATED, PLEASE USE
+                                    MovingSymbolsEnvironment.add_subscriber**. list of
+                                    subscribers to receive constructor messages. Each object
                                     in the list must have a "process_message" method.
         """
 
@@ -341,10 +344,15 @@ class MovingSymbolsEnvironment:
         self.video_size = self.params['video_size']
 
         self._subscribers = []
-        for subscriber in initial_subscribers:
-            self.add_subscriber(subscriber)
+        if initial_subscribers is not None:
+            warn('initial_subscribers is deprecated. Please use add_subscribers() instead.')
+            for subscriber in initial_subscribers:
+                self.add_subscriber(subscriber)
 
-        self._publish_message(dict(
+        self._init_messages = []
+        self._step_called = False
+
+        self._add_init_message(dict(
             step=-1,
             type='params',
             meta=dict(self.params)
@@ -368,7 +376,7 @@ class MovingSymbolsEnvironment:
             font_size = self.debug_options['frame_number_font_size']
             self._pg_font = pg.font.SysFont(pg.font.get_default_font(), font_size)
             self._pg_clock = pg.time.Clock()
-            self._publish_message(dict(
+            self._add_init_message(dict(
                 step=-1,
                 type='debug_options',
                 meta=dict(debug_options)
@@ -461,7 +469,8 @@ class MovingSymbolsEnvironment:
             self.symbols.append(symbol)
 
             # Publish message about the symbol
-            self._publish_message(symbol.get_init_message())
+            # self._publish_message(symbol.get_init_message())
+            self._add_init_message(symbol.get_init_message())
 
         # Add walls
         self._add_walls()
@@ -489,7 +498,7 @@ class MovingSymbolsEnvironment:
             self.background.paste(bg_image)
 
             # Publish information about the chosen background
-            message = dict(
+            self._add_init_message(dict(
                 step=-1,
                 type='background',
                 meta=dict(
@@ -497,8 +506,7 @@ class MovingSymbolsEnvironment:
                     image=np.array(self.background),
                     image_path=full_image_path
                 )
-            )
-            self._publish_message(message)
+            ))
 
 
     def _add_walls(self):
@@ -695,6 +703,13 @@ class MovingSymbolsEnvironment:
 
     def _step(self):
         """Update the positions, scales, and rotations of each symbol."""
+
+        # Publish all init messages, and update _step_called flag
+        if not self._step_called:
+            self._step_called = True
+            for message in self._init_messages:
+                self._publish_message(message)
+
         # First, publish messages about current symbol states
         for symbol in self.symbols:
             self._publish_message(symbol.get_state_message(self._step_count))
@@ -796,6 +811,8 @@ class MovingSymbolsEnvironment:
         @param message: Dict of information to publish
         """
         assert(isinstance(message, dict))
+        if not self._step_called:
+            raise RuntimeError('_publish_message() was called before _step(), which is not allowed')
         for subscriber in self._subscribers:
             subscriber.process_message(dict(message))
 
@@ -811,6 +828,16 @@ class MovingSymbolsEnvironment:
             raise ValueError('The given subscriber does not have a "process_message" method')
 
         self._subscribers.append(subscriber)
+
+
+    def _add_init_message(self, message):
+        """Add a message that will be published when _step is called for the first time.
+
+        @param message: Dict of information to publish
+        """
+        if self._step_called:
+            raise RuntimeError('_add_init_message() was called after _step(), which is not allowed')
+        self._init_messages.append(message)
 
 
     """GENERATOR METHODS"""
