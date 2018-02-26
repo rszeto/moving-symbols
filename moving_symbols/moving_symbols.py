@@ -226,17 +226,64 @@ class MovingSymbolsEnvironment:
         within scale_limits
     - **rotate_at_start, bool**: Whether symbols can start at a rotated angle
     - **rescale_at_start, bool**: Whether symbols can start at any scale in the specified range. If
-                              not. the scale of all symbols is initialized to the middle of the
-                              allowed scale range.
+      not. the scale of all symbols is initialized to the middle of the allowed scale range.
     - **lateral_motion_at_start, bool**: Whether symbols can only translate left/right/up/down to
-                                     start. If this is True, symbols can only move non-laterally if
-                                     they bounce off of other symbols.
+      start. If this is True, symbols can only move non-laterally if they bounce off of other
+      symbols.
     - **background_data_dir, str**: Path to the background directory. This directory should contain
       one folder for each split, e.g. "training" and "testing", and each split directory should
       contain folders for each class. If you do not set both this and `background_labels`,
       then all videos will have solid black backgrounds.
     - **background_labels, list of str**: The labels for the background classes. If you do not
       set both this and `background_data_dir`, then all videos will have solid black backgrounds.
+
+    A MovingSymbolsEnvironment object also publishes messages that describe each symbol's
+    initialization and state; subscribers can be added either through
+    MovingSymbolsEnvironment.__init__ or with MovingSymbolsEnvironment.add_subscriber. A
+    subscriber must implement the `process_message` method that takes exactly one argument,
+    a `dict` containing the published message. All messages have the following key-value pairs:
+
+    - **step, int**: The time step that the message describes. For initialization messages,
+    this is -1. The first rendered frame corresponds to step 0.
+    - **type, str**: An identifier for what kind of message this is. This can be used to filter
+      out messages and determine the structure of the meta-information without probing it.
+    - **meta, dict**: The actual contents of the message.
+
+    Below is a list of key-value pairs associated with the `meta` dict for each message type:
+
+    * **params**: This is a copy of the `params` argument passed in to the MovingSymbolsEnvironment
+      object's constructor.
+    * **debug_options**: This is a copy of the `debug_options` argument passed in to the
+    MovingSymbolsEnvironment object's constructor.
+    * **background**
+        - label: The name of the background class
+        - image: An np.array containing the full background image of the video
+        - image_path: Path to the source image
+    * **symbol_init**
+      - symbol_id: The `id` field of the relevant Symbol
+      - label: The `label` field of the relevant Symbol
+      - image: An np.array of the Symbol's full image (dimensions H x W x 4)
+      - image_path: Path to the Symbol's source image (uncropped)
+      - vertices: The PyMunk coordinates defining the Symbol's hitbox as a V x 2 np.float array
+    * **symbol_state**
+      - symbol_id: The `id` for the relevant Symbol
+      - position: The Symbol's PyGame coordinates as an np.array
+      - angle: The Symbol's PyGame angle
+      - scale: The Symbol's `scale`
+      - velocity: The Symbol's PyGame velocity as an np.array
+      - angular_velocity: The Symbol's `angular_velocity`
+      - scale_velocity: The Symbol's scale velocity
+    * **start_overlap**
+        - symbol_ids: The `id`s of the Symbols that have started overlapping at this time step
+        (as a list)
+    * **end_overlap**
+        - symbol_ids: The `id`s of the Symbols that have stopped overlapping at this time step
+        (as a list)
+    * **hit_wall**
+        - symbol_id: The `id` of the Symbol that hit a wall at this time step
+        - wall_label: A label for the wall that was hit at this time step. Can be "left",
+        "right", "top", or "bottom".
+
     """
 
     DEFAULT_PARAMS = dict(
@@ -747,7 +794,6 @@ class MovingSymbolsEnvironment:
         """Publish a message to any subscribers
 
         @param message: Dict of information to publish
-        @retval:
         """
         assert(isinstance(message, dict))
         for subscriber in self._subscribers:
@@ -755,7 +801,7 @@ class MovingSymbolsEnvironment:
 
 
     def add_subscriber(self, subscriber):
-        """Add a subscriber of published messages. The subscriber must have a callable
+        """Add a subscriber of published messages.\ The subscriber must have a callable
         "process_message" method.
 
         @param subscriber: An object with a callable "process_message" method
