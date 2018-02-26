@@ -441,6 +441,18 @@ class MovingSymbolsEnvironment:
             # Anchor top-left corner of background to top-left corner of frame
             self.background.paste(bg_image)
 
+            # Publish information about the chosen background
+            message = dict(
+                step=-1,
+                type='background',
+                meta=dict(
+                    label=category_name,
+                    image=np.array(self.background),
+                    image_path=full_image_path
+                )
+            )
+            self._publish_message(message)
+
 
     def _add_walls(self):
         space = self._space
