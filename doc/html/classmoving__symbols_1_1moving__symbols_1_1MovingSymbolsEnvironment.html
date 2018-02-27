@@ -101,11 +101,11 @@ var searchBox = new SearchBox("searchBox", "search",false,'Search');
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a57119ac3148a116fac2206c500aff101"><td class="memItemLeft" align="right" valign="top">def&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html#a57119ac3148a116fac2206c500aff101">__init__</a> (self, params, seed, fidelity=10, debug_options=None, initial_subscribers=[])</td></tr>
-<tr class="memdesc:a57119ac3148a116fac2206c500aff101"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructor.  <a href="#a57119ac3148a116fac2206c500aff101">More...</a><br /></td></tr>
-<tr class="separator:a57119ac3148a116fac2206c500aff101"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1008473b61f78a7e7bd8bdf9c9298623"><td class="memItemLeft" align="right" valign="top">def&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html#a1008473b61f78a7e7bd8bdf9c9298623">__init__</a> (self, params, seed, fidelity=10, debug_options=None)</td></tr>
+<tr class="memdesc:a1008473b61f78a7e7bd8bdf9c9298623"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructor.  <a href="#a1008473b61f78a7e7bd8bdf9c9298623">More...</a><br /></td></tr>
+<tr class="separator:a1008473b61f78a7e7bd8bdf9c9298623"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa19eafdba1dcdf0b93413f7cb994211f"><td class="memItemLeft" align="right" valign="top">def&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html#aa19eafdba1dcdf0b93413f7cb994211f">add_subscriber</a> (self, subscriber)</td></tr>
-<tr class="memdesc:aa19eafdba1dcdf0b93413f7cb994211f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Add a subscriber of published messages.  <a href="#aa19eafdba1dcdf0b93413f7cb994211f">More...</a><br /></td></tr>
+<tr class="memdesc:aa19eafdba1dcdf0b93413f7cb994211f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Add a subscriber of published messages. The subscriber must have a callable "process_message" method.  <a href="#aa19eafdba1dcdf0b93413f7cb994211f">More...</a><br /></td></tr>
 <tr class="separator:aa19eafdba1dcdf0b93413f7cb994211f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac5f0aeeac5e28251f4825e17db48b346"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ac5f0aeeac5e28251f4825e17db48b346"></a>
 def&#160;</td><td class="memItemRight" valign="bottom"><b>send</b> (self, _)</td></tr>
@@ -143,6 +143,9 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a80486b4d5a3d432e6f4c2440c1e001a3"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="a80486b4d5a3d432e6f4c2440c1e001a3"></a>
 &#160;</td><td class="memItemRight" valign="bottom"><b>symbols</b></td></tr>
 <tr class="separator:a80486b4d5a3d432e6f4c2440c1e001a3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0d8970bfb25108cbb7ed1dc52ac95646"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="a0d8970bfb25108cbb7ed1dc52ac95646"></a>
+&#160;</td><td class="memItemRight" valign="bottom"><b>background</b></td></tr>
+<tr class="separator:a0d8970bfb25108cbb7ed1dc52ac95646"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
@@ -175,10 +178,60 @@ Static Public Attributes</h2></td></tr>
 </li>
 <li><b>rotate_at_start, bool</b>: Whether symbols can start at a rotated angle</li>
 <li><b>rescale_at_start, bool</b>: Whether symbols can start at any scale in the specified range. If not. the scale of all symbols is initialized to the middle of the allowed scale range.</li>
-<li><b>lateral_motion_at_start, bool</b>: Whether symbols can only translate left/right/up/down to start. If this is True, symbols can only move non-laterally if they bounce off of other symbols. </li>
+<li><b>lateral_motion_at_start, bool</b>: Whether symbols can only translate left/right/up/down to start. If this is True, symbols can only move non-laterally if they bounce off of other symbols.</li>
+<li><b>background_data_dir, str</b>: Path to the background directory. This directory should contain one folder for each split, e.g. "training" and "testing", and each split directory should contain folders for each class. If you do not set both this and <code>background_labels</code>, then all videos will have solid black backgrounds.</li>
+<li><b>background_labels, list of str</b>: The labels for the background classes. If you do not set both this and <code>background_data_dir</code>, then all videos will have solid black backgrounds.</li>
+</ul>
+<p>A <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html" title="Generator that produces Moving Symbol video frames. ">MovingSymbolsEnvironment</a> object also publishes messages that describe each symbol's initialization and state; subscribers can be added with <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html#aa19eafdba1dcdf0b93413f7cb994211f" title="Add a subscriber of published messages. The subscriber must have a callable &quot;process_message&quot; method...">add_subscriber()</a>. A subscriber must implement the <code>process_message</code> method that takes exactly one argument, a <code>dict</code> containing the published message. All messages have the following key-value pairs:</p>
+<ul>
+<li><b>step, int</b>: The time step that the message describes. For initialization messages, this is -1. The first rendered frame corresponds to step 0.</li>
+<li><b>type, str</b>: An identifier for what kind of message this is. This can be used to filter out messages and determine the structure of the meta-information without probing it.</li>
+<li><b>meta, dict</b>: The actual contents of the message.</li>
+</ul>
+<p>Below is a list of key-value pairs associated with the <code>meta</code> dict for each message type:</p>
+<ul>
+<li><b>params</b>: This is a copy of the <code>params</code> argument passed in to the <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html" title="Generator that produces Moving Symbol video frames. ">MovingSymbolsEnvironment</a> object's constructor.</li>
+<li><b>debug_options</b>: This is a copy of the <code>debug_options</code> argument passed in to the <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1MovingSymbolsEnvironment.html" title="Generator that produces Moving Symbol video frames. ">MovingSymbolsEnvironment</a> object's constructor.</li>
+<li><b>background</b><ul>
+<li>label: The name of the background class</li>
+<li>image: An np.array containing the full background image of the video</li>
+<li>image_path: Path to the source image</li>
+</ul>
+</li>
+<li><b>symbol_init</b><ul>
+<li>symbol_id: The <code>id</code> field of the relevant <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a></li>
+<li>label: The <code>label</code> field of the relevant <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a></li>
+<li>image: An np.array of the <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s full image (dimensions H x W x 4)</li>
+<li>image_path: Path to the <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s source image (uncropped)</li>
+<li>vertices: The PyMunk coordinates defining the <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s hitbox as a V x 2 np.float array</li>
+</ul>
+</li>
+<li><b>symbol_state</b><ul>
+<li>symbol_id: The <code>id</code> for the relevant <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a></li>
+<li>position: The <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s PyGame coordinates as an np.array</li>
+<li>angle: The <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s PyGame angle</li>
+<li>scale: The <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s <code>scale</code></li>
+<li>velocity: The <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s PyGame velocity as an np.array</li>
+<li>angular_velocity: The <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s <code>angular_velocity</code></li>
+<li>scale_velocity: The <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a>'s scale velocity</li>
+</ul>
+</li>
+<li><b>start_overlap</b><ul>
+<li>symbol_ids: The <code>id</code>s of the Symbols that have started overlapping at this time step (as a list)</li>
+</ul>
+</li>
+<li><b>end_overlap</b><ul>
+<li>symbol_ids: The <code>id</code>s of the Symbols that have stopped overlapping at this time step (as a list)</li>
+</ul>
+</li>
+<li><b>hit_wall</b><ul>
+<li>symbol_id: The <code>id</code> of the <a class="el" href="classmoving__symbols_1_1moving__symbols_1_1Symbol.html">Symbol</a> that hit a wall at this time step</li>
+<li>wall_label: A label for the wall that was hit at this time step. Can be "left", "right", "top", or "bottom". </li>
+</ul>
+</li>
 </ul>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a class="anchor" id="a57119ac3148a116fac2206c500aff101"></a>
+<a class="anchor" id="a1008473b61f78a7e7bd8bdf9c9298623"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -210,13 +263,7 @@ Static Public Attributes</h2></td></tr>
           <td class="paramkey"></td>
           <td></td>
           <td class="paramtype">&#160;</td>
-          <td class="paramname"><em>debug_options</em> = <code>None</code>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">&#160;</td>
-          <td class="paramname"><em>initial_subscribers</em> = <code>[]</code>&#160;</td>
+          <td class="paramname"><em>debug_options</em> = <code>None</code>&#160;</td>
         </tr>
         <tr>
           <td></td>
@@ -240,7 +287,6 @@ Static Public Attributes</h2></td></tr>
 <li>frame_rate, int: Frame rate of the debug visualization </li>
 </ul>
 </td></tr>
-    <tr><td class="paramname">initial_subscribers</td><td>list of subscribers to receive constructor messages. Each object in the list must have a "process_message" method. </td></tr>
   </table>
   </dd>
 </dl>
@@ -272,8 +318,7 @@ Static Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Add a subscriber of published messages. </p>
-<p>The subscriber must have a callable "process_message" method.</p>
+<p>Add a subscriber of published messages. The subscriber must have a callable "process_message" method. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">subscriber</td><td>An object with a callable "process_message" method </td></tr>
@@ -321,7 +366,7 @@ Static Public Attributes</h2></td></tr>
   </tr>
 </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line"><a name="l00001"></a><span class="lineno">    1</span>&#160;= dict(</div><div class="line"><a name="l00002"></a><span class="lineno">    2</span>&#160;        data_dir=<span class="stringliteral">&#39;../data/mnist&#39;</span>,</div><div class="line"><a name="l00003"></a><span class="lineno">    3</span>&#160;        split=<span class="stringliteral">&#39;training&#39;</span>,</div><div class="line"><a name="l00004"></a><span class="lineno">    4</span>&#160;        num_symbols=1,</div><div class="line"><a name="l00005"></a><span class="lineno">    5</span>&#160;        video_size=(64, 64),</div><div class="line"><a name="l00006"></a><span class="lineno">    6</span>&#160;        color_output=<span class="keyword">True</span>,</div><div class="line"><a name="l00007"></a><span class="lineno">    7</span>&#160;        symbol_labels=[0],</div><div class="line"><a name="l00008"></a><span class="lineno">    8</span>&#160;        scale_limits=(1.0, 1.0),</div><div class="line"><a name="l00009"></a><span class="lineno">    9</span>&#160;        scale_period_limits=(1, 1),</div><div class="line"><a name="l00010"></a><span class="lineno">   10</span>&#160;        rotation_speed_limits=(0, 0),</div><div class="line"><a name="l00011"></a><span class="lineno">   11</span>&#160;        position_speed_limits=(0, 0),</div><div class="line"><a name="l00012"></a><span class="lineno">   12</span>&#160;        interacting_symbols=<span class="keyword">False</span>,</div><div class="line"><a name="l00013"></a><span class="lineno">   13</span>&#160;        scale_function_type=<span class="stringliteral">&#39;constant&#39;</span>,</div><div class="line"><a name="l00014"></a><span class="lineno">   14</span>&#160;        rotate_at_start=<span class="keyword">False</span>,</div><div class="line"><a name="l00015"></a><span class="lineno">   15</span>&#160;        rescale_at_start=<span class="keyword">True</span>,</div><div class="line"><a name="l00016"></a><span class="lineno">   16</span>&#160;        lateral_motion_at_start=<span class="keyword">False</span></div><div class="line"><a name="l00017"></a><span class="lineno">   17</span>&#160;    )</div></div><!-- fragment -->
+<b>Initial value:</b><div class="fragment"><div class="line"><a name="l00001"></a><span class="lineno">    1</span>&#160;= dict(</div><div class="line"><a name="l00002"></a><span class="lineno">    2</span>&#160;        data_dir=<span class="stringliteral">&#39;../data/mnist&#39;</span>,</div><div class="line"><a name="l00003"></a><span class="lineno">    3</span>&#160;        split=<span class="stringliteral">&#39;training&#39;</span>,</div><div class="line"><a name="l00004"></a><span class="lineno">    4</span>&#160;        num_symbols=1,</div><div class="line"><a name="l00005"></a><span class="lineno">    5</span>&#160;        video_size=(64, 64),</div><div class="line"><a name="l00006"></a><span class="lineno">    6</span>&#160;        color_output=<span class="keyword">True</span>,</div><div class="line"><a name="l00007"></a><span class="lineno">    7</span>&#160;        symbol_labels=[0],</div><div class="line"><a name="l00008"></a><span class="lineno">    8</span>&#160;        scale_limits=(1.0, 1.0),</div><div class="line"><a name="l00009"></a><span class="lineno">    9</span>&#160;        scale_period_limits=(1, 1),</div><div class="line"><a name="l00010"></a><span class="lineno">   10</span>&#160;        rotation_speed_limits=(0, 0),</div><div class="line"><a name="l00011"></a><span class="lineno">   11</span>&#160;        position_speed_limits=(0, 0),</div><div class="line"><a name="l00012"></a><span class="lineno">   12</span>&#160;        interacting_symbols=<span class="keyword">False</span>,</div><div class="line"><a name="l00013"></a><span class="lineno">   13</span>&#160;        scale_function_type=<span class="stringliteral">&#39;constant&#39;</span>,</div><div class="line"><a name="l00014"></a><span class="lineno">   14</span>&#160;        rotate_at_start=<span class="keyword">False</span>,</div><div class="line"><a name="l00015"></a><span class="lineno">   15</span>&#160;        rescale_at_start=<span class="keyword">True</span>,</div><div class="line"><a name="l00016"></a><span class="lineno">   16</span>&#160;        lateral_motion_at_start=<span class="keyword">False</span>,</div><div class="line"><a name="l00017"></a><span class="lineno">   17</span>&#160;        background_data_dir=<span class="keywordtype">None</span>,</div><div class="line"><a name="l00018"></a><span class="lineno">   18</span>&#160;        background_labels=<span class="keywordtype">None</span></div><div class="line"><a name="l00019"></a><span class="lineno">   19</span>&#160;    )</div></div><!-- fragment -->
 </div>
 </div>
 </div><!-- contents -->

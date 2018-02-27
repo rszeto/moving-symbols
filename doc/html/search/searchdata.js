@@ -3,7 +3,7 @@ var indexSectionsWithContent =
   0: "_agims",
   1: "ims",
   2: "_ags",
-  3: "im"
+  3: "m"
 };
 
 var indexSectionNames =

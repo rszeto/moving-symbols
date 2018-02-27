@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['index',['index',['../md_index.html',1,'']]]
+  ['moving_20symbols_20api',['Moving Symbols API',['../index.html',1,'']]]
 ];
