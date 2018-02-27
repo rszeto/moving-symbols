@@ -1,3 +1,52 @@
+"""@mainpage Moving Symbols API
+
+# Entry Point
+
+The `moving_symbols` package provides the `MovingSymbolsEnvironment` class, which is the one you
+should be using to generate Moving Symbols videos.
+
+# Tiny Example
+
+The following code snippet puts the frames of one Moving Symbols video into a list:
+
+```python
+    from moving_symbols import MovingSymbolsEnvironment
+
+    env = MovingSymbolsEnvironment(params, seed)
+
+    all_frames = []
+    for _ in xrange(num_frames):
+        frame = env.next()
+        all_frames.append(np.array(frame))
+```
+
+# %MovingSymbolsEnvironment as a Publisher
+
+A MovingSymbolsEnvironment instance publishes messages corresponding to the initialization and
+state of each symbol at all time steps. The following code snippet shows an example where a
+subscriber collects all the published messages:
+
+```python
+    from moving_symbols import MovingSymbolsEnvironment
+
+    class Subscriber:
+        def process_message(self, message):
+            print(message)
+
+    env = MovingSymbolsEnvironment(params, seed)
+    sub = Subscriber()
+    env.add_subscriber(sub)
+
+    all_frames = []
+    for _ in xrange(num_frames):
+        frame = env.next()
+        all_frames.append(np.array(frame))
+```
+
+Messages start getting published as soon as `env.next()` is first called.
+
+"""
+
 import math
 import os
 import sys
@@ -239,10 +288,9 @@ class MovingSymbolsEnvironment:
       set both this and `background_data_dir`, then all videos will have solid black backgrounds.
 
     A MovingSymbolsEnvironment object also publishes messages that describe each symbol's
-    initialization and state; subscribers can be added either through
-    MovingSymbolsEnvironment.__init__ or with MovingSymbolsEnvironment.add_subscriber. A
-    subscriber must implement the `process_message` method that takes exactly one argument,
-    a `dict` containing the published message. All messages have the following key-value pairs:
+    initialization and state; subscribers can be added with add_subscriber().
+    A subscriber must implement the `process_message` method that takes exactly one argument, a
+    `dict` containing the published message. All messages have the following key-value pairs:
 
     - **step, int**: The time step that the message describes. For initialization messages,
     this is -1. The first rendered frame corresponds to step 0.
@@ -316,7 +364,7 @@ class MovingSymbolsEnvironment:
     )
 
 
-    def __init__(self, params, seed, fidelity=10, debug_options=None, initial_subscribers=None):
+    def __init__(self, params, seed, fidelity=10, debug_options=None):
         """Constructor
 
         @param params: dict of parameters that define how symbols behave and are rendered. See the
@@ -331,10 +379,7 @@ class MovingSymbolsEnvironment:
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
                               - frame_rate, int: Frame rate of the debug visualization
-        @param initial_subscribers: **THIS IS DEPRECATED, PLEASE USE
-                                    MovingSymbolsEnvironment.add_subscriber**. list of
-                                    subscribers to receive constructor messages. Each object
-                                    in the list must have a "process_message" method.
+
         """
 
         self.params = merge_dicts(MovingSymbolsEnvironment.DEFAULT_PARAMS, params)
@@ -344,11 +389,6 @@ class MovingSymbolsEnvironment:
         self.video_size = self.params['video_size']
 
         self._subscribers = []
-        if initial_subscribers is not None:
-            warn('initial_subscribers is deprecated. Please use add_subscribers() instead.')
-            for subscriber in initial_subscribers:
-                self.add_subscriber(subscriber)
-
         self._init_messages = []
         self._step_called = False
 

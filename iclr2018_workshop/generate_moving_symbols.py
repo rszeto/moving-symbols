@@ -149,7 +149,8 @@ def get_param_dicts():
 def generate_moving_symbols_video((seed, num_frames, params)):
     """Create the T x H x W (x C) NumPy array for one video."""
     sub = MovingSymbolsClassTrajectoryTracker()
-    env = MovingSymbolsEnvironment(params, seed, initial_subscribers=[sub])
+    env = MovingSymbolsEnvironment(params, seed)
+    env.add_subscriber(sub)
 
     all_frames = []
     for _ in xrange(num_frames):
