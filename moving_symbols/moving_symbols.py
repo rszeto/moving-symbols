@@ -1,6 +1,56 @@
+"""@mainpage Moving Symbols API
+
+# Entry Point
+
+The `moving_symbols` package provides the `MovingSymbolsEnvironment` class, which is the one you
+should be using to generate Moving Symbols videos.
+
+# Tiny Example
+
+The following code snippet puts the frames of one Moving Symbols video into a list:
+
+```python
+    from moving_symbols import MovingSymbolsEnvironment
+
+    env = MovingSymbolsEnvironment(params, seed)
+
+    all_frames = []
+    for _ in xrange(num_frames):
+        frame = env.next()
+        all_frames.append(np.array(frame))
+```
+
+# %MovingSymbolsEnvironment as a Publisher
+
+A MovingSymbolsEnvironment instance publishes messages corresponding to the initialization and
+state of each symbol at all time steps. The following code snippet shows an example where a
+subscriber collects all the published messages:
+
+```python
+    from moving_symbols import MovingSymbolsEnvironment
+
+    class Subscriber:
+        def process_message(self, message):
+            print(message)
+
+    env = MovingSymbolsEnvironment(params, seed)
+    sub = Subscriber()
+    env.add_subscriber(sub)
+
+    all_frames = []
+    for _ in xrange(num_frames):
+        frame = env.next()
+        all_frames.append(np.array(frame))
+```
+
+Messages start getting published as soon as `env.next()` is first called.
+
+"""
+
 import math
 import os
 import sys
+from warnings import warn
 
 import cv2
 import numpy as np
@@ -226,11 +276,63 @@ class MovingSymbolsEnvironment:
         within scale_limits
     - **rotate_at_start, bool**: Whether symbols can start at a rotated angle
     - **rescale_at_start, bool**: Whether symbols can start at any scale in the specified range. If
-                              not. the scale of all symbols is initialized to the middle of the
-                              allowed scale range.
+      not. the scale of all symbols is initialized to the middle of the allowed scale range.
     - **lateral_motion_at_start, bool**: Whether symbols can only translate left/right/up/down to
-                                     start. If this is True, symbols can only move non-laterally if
-                                     they bounce off of other symbols.
+      start. If this is True, symbols can only move non-laterally if they bounce off of other
+      symbols.
+    - **background_data_dir, str**: Path to the background directory. This directory should contain
+      one folder for each split, e.g. "training" and "testing", and each split directory should
+      contain folders for each class. If you do not set both this and `background_labels`,
+      then all videos will have solid black backgrounds.
+    - **background_labels, list of str**: The labels for the background classes. If you do not
+      set both this and `background_data_dir`, then all videos will have solid black backgrounds.
+
+    A MovingSymbolsEnvironment object also publishes messages that describe each symbol's
+    initialization and state; subscribers can be added with add_subscriber().
+    A subscriber must implement the `process_message` method that takes exactly one argument, a
+    `dict` containing the published message. All messages have the following key-value pairs:
+
+    - **step, int**: The time step that the message describes. For initialization messages,
+    this is -1. The first rendered frame corresponds to step 0.
+    - **type, str**: An identifier for what kind of message this is. This can be used to filter
+      out messages and determine the structure of the meta-information without probing it.
+    - **meta, dict**: The actual contents of the message.
+
+    Below is a list of key-value pairs associated with the `meta` dict for each message type:
+
+    * **params**: This is a copy of the `params` argument passed in to the MovingSymbolsEnvironment
+      object's constructor.
+    * **debug_options**: This is a copy of the `debug_options` argument passed in to the
+    MovingSymbolsEnvironment object's constructor.
+    * **background**
+        - label: The name of the background class
+        - image: An np.array containing the full background image of the video
+        - image_path: Path to the source image
+    * **symbol_init**
+      - symbol_id: The `id` field of the relevant Symbol
+      - label: The `label` field of the relevant Symbol
+      - image: An np.array of the Symbol's full image (dimensions H x W x 4)
+      - image_path: Path to the Symbol's source image (uncropped)
+      - vertices: The PyMunk coordinates defining the Symbol's hitbox as a V x 2 np.float array
+    * **symbol_state**
+      - symbol_id: The `id` for the relevant Symbol
+      - position: The Symbol's PyGame coordinates as an np.array
+      - angle: The Symbol's PyGame angle
+      - scale: The Symbol's `scale`
+      - velocity: The Symbol's PyGame velocity as an np.array
+      - angular_velocity: The Symbol's `angular_velocity`
+      - scale_velocity: The Symbol's scale velocity
+    * **start_overlap**
+        - symbol_ids: The `id`s of the Symbols that have started overlapping at this time step
+        (as a list)
+    * **end_overlap**
+        - symbol_ids: The `id`s of the Symbols that have stopped overlapping at this time step
+        (as a list)
+    * **hit_wall**
+        - symbol_id: The `id` of the Symbol that hit a wall at this time step
+        - wall_label: A label for the wall that was hit at this time step. Can be "left",
+        "right", "top", or "bottom".
+
     """
 
     DEFAULT_PARAMS = dict(
@@ -248,7 +350,9 @@ class MovingSymbolsEnvironment:
         scale_function_type='constant',
         rotate_at_start=False,
         rescale_at_start=True,
-        lateral_motion_at_start=False
+        lateral_motion_at_start=False,
+        background_data_dir=None,
+        background_labels=None
     )
 
     DEFAULT_DEBUG_OPTIONS = dict(
@@ -260,7 +364,7 @@ class MovingSymbolsEnvironment:
     )
 
 
-    def __init__(self, params, seed, fidelity=10, debug_options=None, initial_subscribers=[]):
+    def __init__(self, params, seed, fidelity=10, debug_options=None):
         """Constructor
 
         @param params: dict of parameters that define how symbols behave and are rendered. See the
@@ -275,8 +379,7 @@ class MovingSymbolsEnvironment:
                               - show_frame_number, bool: Whether to show the index of the frame
                               - frame_number_font_size, int: Size of the frame index font
                               - frame_rate, int: Frame rate of the debug visualization
-        @param initial_subscribers: list of subscribers to receive constructor messages. Each object
-                                    in the list must have a "process_message" method.
+
         """
 
         self.params = merge_dicts(MovingSymbolsEnvironment.DEFAULT_PARAMS, params)
@@ -286,10 +389,10 @@ class MovingSymbolsEnvironment:
         self.video_size = self.params['video_size']
 
         self._subscribers = []
-        for subscriber in initial_subscribers:
-            self.add_subscriber(subscriber)
+        self._init_messages = []
+        self._step_called = False
 
-        self._publish_message(dict(
+        self._add_init_message(dict(
             step=-1,
             type='params',
             meta=dict(self.params)
@@ -313,7 +416,7 @@ class MovingSymbolsEnvironment:
             font_size = self.debug_options['frame_number_font_size']
             self._pg_font = pg.font.SysFont(pg.font.get_default_font(), font_size)
             self._pg_clock = pg.time.Clock()
-            self._publish_message(dict(
+            self._add_init_message(dict(
                 step=-1,
                 type='debug_options',
                 meta=dict(debug_options)
@@ -406,7 +509,8 @@ class MovingSymbolsEnvironment:
             self.symbols.append(symbol)
 
             # Publish message about the symbol
-            self._publish_message(symbol.get_init_message())
+            # self._publish_message(symbol.get_init_message())
+            self._add_init_message(symbol.get_init_message())
 
         # Add walls
         self._add_walls()
@@ -416,6 +520,33 @@ class MovingSymbolsEnvironment:
         )
         # Init step count
         self._step_count = 0
+
+        # Set background image
+        self.background = Image.fromarray(np.zeros((self.video_size[0], self.video_size[1], 3),
+                                                   dtype=np.uint8))
+        bg_data_dir = self.params['background_data_dir']
+        bg_labels = self.params['background_labels']
+        if bg_data_dir is not None and bg_labels is not None:
+            # Choose a category
+            category_name = bg_labels[np.random.randint(len(bg_labels))]
+            # Choose an image
+            dir = os.path.join(bg_data_dir, self.params['split'], category_name)
+            file_name = os.listdir(dir)[np.random.randint(len(os.listdir(dir)))]
+            full_image_path = os.path.join(dir, file_name)
+            bg_image = Image.open(full_image_path)
+            # Anchor top-left corner of background to top-left corner of frame
+            self.background.paste(bg_image)
+
+            # Publish information about the chosen background
+            self._add_init_message(dict(
+                step=-1,
+                type='background',
+                meta=dict(
+                    label=category_name,
+                    image=np.array(self.background),
+                    image_path=full_image_path
+                )
+            ))
 
 
     def _add_walls(self):
@@ -612,6 +743,13 @@ class MovingSymbolsEnvironment:
 
     def _step(self):
         """Update the positions, scales, and rotations of each symbol."""
+
+        # Publish all init messages, and update _step_called flag
+        if not self._step_called:
+            self._step_called = True
+            for message in self._init_messages:
+                self._publish_message(message)
+
         # First, publish messages about current symbol states
         for symbol in self.symbols:
             self._publish_message(symbol.get_state_message(self._step_count))
@@ -637,8 +775,10 @@ class MovingSymbolsEnvironment:
         if self.debug_options is None:
             raise RuntimeError('_render_pg cannot be called since no debug options were given.')
 
-        # Use black background
-        self._pg_screen.fill(pg.color.THECOLORS['black'])
+        # Draw background image
+        bg_sprite = pg.image.fromstring(self.background.tobytes(), self.background.size,
+                                        self.background.mode)
+        self._pg_screen.blit(bg_sprite, (0, 0))
 
         # Use PyMunk's default drawing function (guaranteed correctness)
         if self.debug_options['show_pymunk_debug']:
@@ -681,7 +821,7 @@ class MovingSymbolsEnvironment:
 
         @retval: Image (RGB or L format)
         """
-        ret = np.zeros((self.video_size[1], self.video_size[0], 3), dtype=np.float32)
+        ret = np.array(self.background, dtype=np.float32) / 255.
 
         for x, symbol in enumerate(self.symbols):
             angle = symbol.body.angle
@@ -709,15 +849,16 @@ class MovingSymbolsEnvironment:
         """Publish a message to any subscribers
 
         @param message: Dict of information to publish
-        @retval:
         """
         assert(isinstance(message, dict))
+        if not self._step_called:
+            raise RuntimeError('_publish_message() was called before _step(), which is not allowed')
         for subscriber in self._subscribers:
             subscriber.process_message(dict(message))
 
 
     def add_subscriber(self, subscriber):
-        """Add a subscriber of published messages. The subscriber must have a callable
+        """Add a subscriber of published messages.\ The subscriber must have a callable
         "process_message" method.
 
         @param subscriber: An object with a callable "process_message" method
@@ -727,6 +868,16 @@ class MovingSymbolsEnvironment:
             raise ValueError('The given subscriber does not have a "process_message" method')
 
         self._subscribers.append(subscriber)
+
+
+    def _add_init_message(self, message):
+        """Add a message that will be published when _step is called for the first time.
+
+        @param message: Dict of information to publish
+        """
+        if self._step_called:
+            raise RuntimeError('_add_init_message() was called after _step(), which is not allowed')
+        self._init_messages.append(message)
 
 
     """GENERATOR METHODS"""

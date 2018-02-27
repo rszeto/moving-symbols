@@ -73,7 +73,5 @@ sys.path.append('/path/to/project/root')
 from moving_symbols import MovingSymbolsEnvironment
 ```
 
-## User Guide
-
-I'll fill this in later. For now, look through the `generate_moving_symbols.py` script for examples
-on how to use the Moving Symbols package.
+You can find the API documentation [here](http://ryanszeto.com/moving-symbols/doc/html/index.html).
+For a full example, you can look through the `iclr2018_workshop/generate_moving_symbols.py` script.
