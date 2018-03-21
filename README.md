@@ -6,6 +6,20 @@ Moving Symbols is a Python package that lets you generate videos of moving image
 flexible manner. You can specify your own parameters for the translation, rotation, and scaling
 speeds of images, and even use your own image datasets!
 
+## Citing this work
+
+If you find this dataset useful, please cite our ICLR 2018 Workshop paper:
+
+```
+@inproceedings{szeto2018dataset,
+    author = "Szeto, Ryan and Stent, Simon and Ros, German and Corso, Jason J.",
+    title = "A Dataset To Evaluate The Representations Learned By Video Prediction Models",
+    booktitle = "International Conference on Learning Representations (Workshop Track)",
+    month = "Apr",
+    year = "2018"
+}
+```
+
 ## Environment
 
 This code was tested on Python 2.7 on Ubuntu 16.04. It might not work for Python 3.X; support might
