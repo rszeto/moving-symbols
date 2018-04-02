@@ -70,12 +70,12 @@ _COLLISION_TYPES = dict(
 
 class ImageLoader:
 
-    def __init__(self, root, mode):
+    def __init__(self, root, mode=None):
         """
 
         @param root: The path to the root directory containing all images.
         @param mode: String that indicates how to transform the image for rendering. Options
-        include "tight_crop".
+        include "tight_crop", which crops based on the alpha channel, or None for no processing.
         """
 
         self.root = root
@@ -426,6 +426,8 @@ class MovingSymbolsEnvironment:
         self.symbols = []
         image_loader = ImageLoader(os.path.join(self.params['data_dir'], self.params['split']),
                                    'tight_crop')
+        bg_image_loader = ImageLoader(os.path.join(self.params['background_data_dir'],
+                                                   self.params['split']))
 
         for id in xrange(self.params['num_symbols']):
             label = self.params['symbol_labels'][
@@ -530,11 +532,7 @@ class MovingSymbolsEnvironment:
             # Choose a category
             category_name = bg_labels[np.random.randint(len(bg_labels))]
             # Choose an image
-            dir = os.path.join(bg_data_dir, self.params['split'], category_name)
-            file_name = os.listdir(dir)[np.random.randint(len(os.listdir(dir)))]
-            full_image_path = os.path.join(dir, file_name)
-            bg_image = Image.open(full_image_path)
-            # Anchor top-left corner of background to top-left corner of frame
+            bg_image, full_image_path = bg_image_loader.get_image(category_name)
             self.background.paste(bg_image)
 
             # Publish information about the chosen background
