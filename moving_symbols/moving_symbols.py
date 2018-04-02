@@ -53,6 +53,7 @@ import sys
 from warnings import warn
 
 import cv2
+import h5py
 import numpy as np
 import pygame as pg
 import pymunk as pm
@@ -68,38 +69,104 @@ _COLLISION_TYPES = dict(
 )
 
 
-class ImageLoader:
+class FileImageLoader:
+    """File system-based image loader.
 
-    def __init__(self, root, mode=None):
-        """
+    This class samples images (with their corresponding file path and label) from a dataset stored
+    on a file system.
+    """
+
+    def __init__(self, root, split, labels, mode=None):
+        """Constructor
 
         @param root: The path to the root directory containing all images.
+        @param split: The name of the split within the root directory to sample images from.
+        @param labels: list of possible labels to sample from
         @param mode: String that indicates how to transform the image for rendering. Options
         include "tight_crop", which crops based on the alpha channel, or None for no processing.
         """
 
         self.root = root
+        self.split = split
+        self.labels = labels
         self.mode = mode
 
 
-    def get_image(self, label):
-        """Return a random, pre-processed image in the given label set and its source path.
+    def get_image(self):
+        """Return a random, pre-processed image, along with its label and source path.
 
         The image is pre-processed based on the ImageLoader's mode.
 
-        @param label: The label of the class to sample from
         @retval image: A PIL Image from the given label set
         @retval image_path: The path to the selected image
         """
 
-        class_path = os.path.join(self.root, str(label))
+        label = self.labels[np.random.randint(len(self.labels))]
+        class_path = os.path.join(self.root, self.split, str(label))
         class_image_names = os.listdir(class_path)
         image_idx = np.random.randint(len(class_image_names))
         image_path = os.path.join(class_path, class_image_names[image_idx])
         image = Image.open(image_path, 'r')
         if self.mode == 'tight_crop':
             image = tight_crop(image)
-        return image, image_path
+        return image, label, image_path
+
+
+    def __str__(self):
+        return 'fudge'
+
+
+class HDF5ImageLoader:
+    """HDF5 file-based image loader.
+
+    This class samples images (with their corresponding file path and label) from a dataset stored
+    in an HDF5 file.
+    """
+
+    def __init__(self, h5_file_path, split, labels, mode=None):
+        """Constructor
+
+        @param h5_file_path: The path to an HDF5 file containing all images.
+        @param split: The name of the split within the root directory to sample images from.
+        @param labels: list of possible labels to sample from
+        @param mode: String that indicates how to transform the image for rendering. Options
+        include "tight_crop", which crops based on the alpha channel, or None for no processing.
+        """
+
+        self.h5_file_path = h5_file_path
+        self.mode = mode
+        self.labels = labels
+        self.split = split
+
+        self.h5_file = h5py.File(h5_file_path)
+
+
+    def get_image(self):
+        """Return a random, pre-processed image, along with its label and source path.
+
+        The image is pre-processed based on the ImageLoader's mode.
+
+        @retval image: A PIL Image from the given label set
+        @retval image_path: The path to the selected image, formatted as:
+                            <h5_file_path>:/<split>/<image_class>[<image_num>]
+        """
+
+        label = self.labels[np.random.randint(len(self.labels))]
+        # Get the given image class dataset
+        image_class_dataset = self.h5_file['/%s/%s' % (self.split, label)]
+        # Get random image
+        image_idx = np.random.randint(len(image_class_dataset))
+        image_np = image_class_dataset[image_idx]
+        image = Image.fromarray(image_np, 'RGBA')
+        # Process image
+        if self.mode == 'tight_crop':
+            image = tight_crop(image)
+
+        # Get image path
+        image_path = '%s:/%s/%s[%d]' % (self.h5_file_path, self.split, label, image_idx)
+
+        return image, label, image_path
+
 
 
 class Symbol:
@@ -248,10 +315,8 @@ class MovingSymbolsEnvironment:
     The physical state is initialized based on the parameters given to the constructor (default
     values are supplied by DEFAULT_PARAMS). Below are the key-value pairs that can be specified:
 
-    - **data_dir, str**: Path to the dataset directory. The dataset directory should contain one
-      folder for each split, e.g. "training" and "testing", and each split directory should
-      contain folders for each class (e.g. 0, ..., 9 for MNIST digits).
-    - **split, str**: Name of the data split to sample from
+    - **symbol_image_loader, FileImageLoader or HDF5ImageLoader**: The image dataset sampler from
+      which to sample symbols
     - **num_symbols, int**: How many symbols should appear in the video
     - **video_size, (int, int)**: The resolution of the video as (width, height)
     - **color_output, bool**: Whether to produce "RGB" color images or "L" grayscale images
@@ -280,12 +345,8 @@ class MovingSymbolsEnvironment:
     - **lateral_motion_at_start, bool**: Whether symbols can only translate left/right/up/down to
       start. If this is True, symbols can only move non-laterally if they bounce off of other
       symbols.
-    - **background_data_dir, str**: Path to the background directory. This directory should contain
-      one folder for each split, e.g. "training" and "testing", and each split directory should
-      contain folders for each class. If you do not set both this and `background_labels`,
-      then all videos will have solid black backgrounds.
-    - **background_labels, list of str**: The labels for the background classes. If you do not
-      set both this and `background_data_dir`, then all videos will have solid black backgrounds.
+    - **background_image_loader, FileImageLoader or HDF5ImageLoader**: The image dataset sampler
+      from which to sample backgrounds
 
     A MovingSymbolsEnvironment object also publishes messages that describe each symbol's
     initialization and state; subscribers can be added with add_subscriber().
@@ -336,12 +397,9 @@ class MovingSymbolsEnvironment:
     """
 
     DEFAULT_PARAMS = dict(
-        data_dir='../data/mnist',
-        split='training',
         num_symbols=1,
         video_size=(64, 64),
         color_output=True,
-        symbol_labels=[0],
         scale_limits=(1.0, 1.0),
         scale_period_limits=(1, 1),
         rotation_speed_limits=(0, 0),
@@ -351,8 +409,8 @@ class MovingSymbolsEnvironment:
         rotate_at_start=False,
         rescale_at_start=True,
         lateral_motion_at_start=False,
-        background_data_dir=None,
-        background_labels=None
+        symbol_image_loader=None,
+        background_image_loader=None
     )
 
     DEFAULT_DEBUG_OPTIONS = dict(
@@ -381,6 +439,10 @@ class MovingSymbolsEnvironment:
                               - frame_rate, int: Frame rate of the debug visualization
 
         """
+
+        # Make sure symbol loader is defined
+        if not params.get('symbol_image_loader', False):
+            raise ValueError('No symbol image loader was provided')
 
         self.params = merge_dicts(MovingSymbolsEnvironment.DEFAULT_PARAMS, params)
         self.fidelity = fidelity
@@ -424,16 +486,12 @@ class MovingSymbolsEnvironment:
 
         self._space = pm.Space()
         self.symbols = []
-        image_loader = ImageLoader(os.path.join(self.params['data_dir'], self.params['split']),
-                                   'tight_crop')
-        bg_image_loader = ImageLoader(os.path.join(self.params['background_data_dir'],
-                                                   self.params['split']))
+
+        image_loader = self.params['symbol_image_loader']
+        bg_image_loader = self.params['background_image_loader']
 
         for id in xrange(self.params['num_symbols']):
-            label = self.params['symbol_labels'][
-                np.random.randint(len(self.params['symbol_labels']))
-            ]
-            image, image_path = image_loader.get_image(label)
+            image, label, image_path = image_loader.get_image()
 
             # Define the scale function
             period_limits_index = np.random.choice(len(self.params['scale_period_limits']))
@@ -511,7 +569,6 @@ class MovingSymbolsEnvironment:
             self.symbols.append(symbol)
 
             # Publish message about the symbol
-            # self._publish_message(symbol.get_init_message())
             self._add_init_message(symbol.get_init_message())
 
         # Add walls
@@ -526,13 +583,9 @@ class MovingSymbolsEnvironment:
         # Set background image
         self.background = Image.fromarray(np.zeros((self.video_size[0], self.video_size[1], 3),
                                                    dtype=np.uint8))
-        bg_data_dir = self.params['background_data_dir']
-        bg_labels = self.params['background_labels']
-        if bg_data_dir is not None and bg_labels is not None:
-            # Choose a category
-            category_name = bg_labels[np.random.randint(len(bg_labels))]
+        if bg_image_loader is not None:
             # Choose an image
-            bg_image, full_image_path = bg_image_loader.get_image(category_name)
+            bg_image, category_name, full_image_path = bg_image_loader.get_image()
             self.background.paste(bg_image)
 
             # Publish information about the chosen background

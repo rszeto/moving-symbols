@@ -14,7 +14,7 @@ import numpy as np
 PROJ_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJ_ROOT_DIR)
 
-from moving_symbols import MovingSymbolsEnvironment
+from moving_symbols import MovingSymbolsEnvironment, FileImageLoader
 
 
 class MovingSymbolsClassTrajectoryTracker:
@@ -51,79 +51,75 @@ class MovingSymbolsClassTrajectoryTracker:
 def get_param_dicts():
     # Generalizing rate, slow -> fast and fast -> slow
     mnist_training_slow_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'training',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'training', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': (1, 5)
     }
     mnist_training_fast_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'training',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'training', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': (6, 9)
     }
     mnist_testing_fast_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'testing',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'testing', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': (6, 9)
     }
     mnist_testing_slow_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'testing',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'testing', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': (1, 5)
     }
 
     # Generalizing rate, slow & fast -> medium
     mnist_training_slow_fast_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'training',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'training', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': [(1, 3), (7, 9)]
     }
     mnist_testing_medium_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'testing',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'testing', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': (4, 6)
     }
 
     # Generalizing appearance, MNIST -> Icons8
     mnist_training_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'training',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'training', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': (1, 9)
     }
     icons8_testing_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
-        'split': 'testing',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
+                                               'testing',
+                                               os.listdir(os.path.join(PROJ_ROOT_DIR, 'data',
+                                                                       'icons8', 'testing')),
+                                               'tight_crop'),
         'color_output': False,
-        'symbol_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
         'position_speed_limits': (1, 9)
     }
 
     # Generalizing appearance, Icons8 -> MNIST
     icons8_training_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
-        'split': 'training',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8'),
+                                               'training',
+                                               os.listdir(os.path.join(PROJ_ROOT_DIR, 'data',
+                                                                       'icons8', 'training')),
+                                               'tight_crop'),
         'color_output': False,
-        'symbol_labels': os.listdir(os.path.join(PROJ_ROOT_DIR, 'data', 'icons8', 'training')),
         'position_speed_limits': (1, 9)
     }
     mnist_testing_params = {
-        'data_dir': os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
-        'split': 'testing',
+        'symbol_image_loader': FileImageLoader(os.path.join(PROJ_ROOT_DIR, 'data', 'mnist'),
+                                               'testing', range(10), 'tight_crop'),
         'color_output': False,
-        'symbol_labels': range(10),
         'position_speed_limits': (1, 9)
     }
 

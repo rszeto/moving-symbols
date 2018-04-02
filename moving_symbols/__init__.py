@@ -1,1 +1,1 @@
-from moving_symbols import MovingSymbolsEnvironment
+from moving_symbols import MovingSymbolsEnvironment, FileImageLoader, HDF5ImageLoader
