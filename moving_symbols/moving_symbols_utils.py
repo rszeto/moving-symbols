@@ -101,3 +101,22 @@ def get_closest_axis_vector(v):
         return pm.Vec2d(0, 1)
     else:
         return pm.Vec2d(-1, 0)
+
+
+def alpha_composite(a, b):
+    """Overlay a on top of b. https://en.wikipedia.org/wiki/Alpha_compositing
+
+    :param a: H x W x 4 np.ndarray of type np.float with values in [0, 1]
+    :param b: H x W x 4 np.ndarray of type np.float with values in [0, 1]
+    :return: H x W x 4 np.ndarray of type np.float with values in [0, 1]
+    """
+
+    b_color = b[:, :, :3]
+    b_alpha = b[:, :, 3:]
+    a_color = a[:, :, :3]
+    a_alpha = a[:, :, 3:]
+
+    ret_color = a_color * a_alpha + b_color * b_alpha * (1 - a_alpha)
+    ret_alpha = a_alpha + b_alpha * (1 - a_alpha)
+    ret = np.concatenate((ret_color, ret_alpha), axis=-1)
+    return ret

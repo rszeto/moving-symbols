@@ -61,7 +61,7 @@ import pymunk.pygame_util as pmu
 from PIL import Image
 
 from moving_symbols_utils import merge_dicts, tight_crop, compute_pm_hull_vertices, \
-    create_sine_fn, create_triangle_fn
+    create_sine_fn, create_triangle_fn, alpha_composite
 
 _COLLISION_TYPES = dict(
     symbol=0,
@@ -319,10 +319,12 @@ class MovingSymbolsEnvironment:
       which to sample symbols
     - **num_symbols, int**: How many symbols should appear in the video
     - **video_size, (int, int)**: The resolution of the video as (width, height)
-    - **color_output, bool**: Whether to produce "RGB" color images or "L" grayscale images
-    - **symbol_labels, Sequence**: The labels for the symbol classes. These must be strings or
-      ints (or any object with __str__ implemented) that match the names of the folders in each
-      split directory
+    - **output_type, str**: The PIL Image mode that frames will be generated in. It must match a
+      mode supported by Pillow
+      (https://pillow.readthedocs.io/en/3.1.x/handbook/concepts.html#concept-modes).
+    - **background_type, str**: What kind of background to use; supported options are "black",
+      "transparent", or "image". "image" loads a random background from `background_image_loader`,
+       or falls back to "black" behavior if no `background_image_loader` is found.
     - **scale_limits, (float, float)**: The minimum and maximum scale of an object relative to its
       original size
     - **scale_period_limits, (float, float) or list of (float, float)**: The minimum and maximum
@@ -346,7 +348,8 @@ class MovingSymbolsEnvironment:
       start. If this is True, symbols can only move non-laterally if they bounce off of other
       symbols.
     - **background_image_loader, FileImageLoader or HDF5ImageLoader**: The image dataset sampler
-      from which to sample backgrounds
+      from which to sample backgrounds. This must be defined and `background_type` must be
+      "image" for backgrounds to be sampled.
 
     A MovingSymbolsEnvironment object also publishes messages that describe each symbol's
     initialization and state; subscribers can be added with add_subscriber().
@@ -399,7 +402,8 @@ class MovingSymbolsEnvironment:
     DEFAULT_PARAMS = dict(
         num_symbols=1,
         video_size=(64, 64),
-        color_output=True,
+        output_type='RGB',
+        background_type='black',
         scale_limits=(1.0, 1.0),
         scale_period_limits=(1, 1),
         rotation_speed_limits=(0, 0),
@@ -580,24 +584,35 @@ class MovingSymbolsEnvironment:
         # Init step count
         self._step_count = 0
 
-        # Set background image
-        self.background = Image.fromarray(np.zeros((self.video_size[0], self.video_size[1], 3),
+        # Set background image. Use a transparent background to start
+        background_type = self.params['background_type']
+        self.background = Image.fromarray(np.zeros((self.video_size[0], self.video_size[1], 4),
                                                    dtype=np.uint8))
-        if bg_image_loader is not None:
+        if background_type != 'transparent':
+            # Add a black background
+            self.background.paste(Image.fromarray(
+                np.zeros((self.video_size[0], self.video_size[1], 3), dtype=np.uint8)
+            ))
+        if background_type == 'image' and bg_image_loader is not None:
             # Choose an image
             bg_image, category_name, full_image_path = bg_image_loader.get_image()
             self.background.paste(bg_image)
 
-            # Publish information about the chosen background
-            self._add_init_message(dict(
-                step=-1,
-                type='background',
-                meta=dict(
-                    label=category_name,
-                    image=np.array(self.background),
-                    image_path=full_image_path
-                )
-            ))
+        # Publish information about the chosen background
+        label = category_name if background_type == 'image' and bg_image_loader is not None \
+            else None
+        image_path = full_image_path if background_type == 'image' and bg_image_loader is not None \
+            else None
+        self._add_init_message(dict(
+            step=-1,
+            type='background',
+            meta=dict(
+                type=background_type,
+                label=label,
+                image=np.array(self.background),
+                image_path=image_path
+            )
+        ))
 
 
     def _add_walls(self):
@@ -867,10 +882,9 @@ class MovingSymbolsEnvironment:
 
         Generate an Image containing the visualized scene as rendered by OpenCV. This renders the
         scene using floating-point position, scale, and rotation, so it should be used for the
-        final render. It outputs a PIL Image in either "RGB" or "L" mode depending on the value
-        of the "color_output" flag specified in the constructor parameters.
+        final render. It outputs a PIL Image in the mode specified in the constructor parameters.
 
-        @retval: Image (RGB or L format)
+        @retval: Image
         """
         ret = np.array(self.background, dtype=np.float32) / 255.
 
@@ -885,15 +899,13 @@ class MovingSymbolsEnvironment:
             M[1, 2] += position[1] - height/2.
 
             overlay = cv2.warpAffine(np.array(symbol.image), M, self.video_size) / 255.
-            alpha = np.stack([overlay[:, :, 3] for _ in xrange(3)], axis=2)
-            ret = (1 - alpha) * ret + alpha * overlay[:, :, :3]
 
-        # Get image to RGB 0-255 format
-        ret = np.multiply(ret, 255).astype(np.uint8)
-        # Convert image to grayscale if specified
-        if not self.params['color_output']:
-            ret = cv2.cvtColor(ret, cv2.COLOR_RGB2GRAY)
-        return Image.fromarray(ret)
+            ret = alpha_composite(overlay, ret)
+
+        # Convert to PIL Image whose type matches `output_type`
+        output = Image.fromarray(np.multiply(ret, 255).astype(np.uint8), 'RGBA')
+        output = output.convert(self.params['output_type'])
+        return output
 
 
     def _publish_message(self, message):
