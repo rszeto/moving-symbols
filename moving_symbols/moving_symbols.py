@@ -426,8 +426,11 @@ class MovingSymbolsEnvironment:
         self.symbols = []
         image_loader = ImageLoader(os.path.join(self.params['data_dir'], self.params['split']),
                                    'tight_crop')
-        bg_image_loader = ImageLoader(os.path.join(self.params['background_data_dir'],
-                                                   self.params['split']))
+        if self.params['background_data_dir'] is None or self.params['background_labels'] is None:
+            bg_image_loader = None
+        else:
+            bg_image_loader = ImageLoader(os.path.join(self.params['background_data_dir'],
+                                                       self.params['split']))
 
         for id in xrange(self.params['num_symbols']):
             label = self.params['symbol_labels'][
@@ -526,10 +529,9 @@ class MovingSymbolsEnvironment:
         # Set background image
         self.background = Image.fromarray(np.zeros((self.video_size[0], self.video_size[1], 3),
                                                    dtype=np.uint8))
-        bg_data_dir = self.params['background_data_dir']
-        bg_labels = self.params['background_labels']
-        if bg_data_dir is not None and bg_labels is not None:
+        if bg_image_loader is not None:
             # Choose a category
+            bg_labels = self.params['background_labels']
             category_name = bg_labels[np.random.randint(len(bg_labels))]
             # Choose an image
             bg_image, full_image_path = bg_image_loader.get_image(category_name)
