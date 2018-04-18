@@ -426,7 +426,7 @@ class MovingSymbolsEnvironment:
     )
 
 
-    def __init__(self, params, seed, fidelity=10, debug_options=None):
+    def __init__(self, params, seed=None, fidelity=10, debug_options=None):
         """Constructor
 
         @param params: dict of parameters that define how symbols behave and are rendered. See the
@@ -463,6 +463,11 @@ class MovingSymbolsEnvironment:
             type='params',
             meta=dict(self.params)
         ))
+        self._add_init_message(dict(
+            step=-1,
+            type='seed',
+            meta=dict(seed=seed)
+        ))
 
         # Convert translation/rotation/scale period/speed limits to lists
         if isinstance(self.params['scale_period_limits'], tuple):
@@ -472,8 +477,8 @@ class MovingSymbolsEnvironment:
         if isinstance(self.params['position_speed_limits'], tuple):
             self.params['position_speed_limits'] = [self.params['position_speed_limits']]
 
-        self.cur_rng_seed = seed
-        np.random.seed(self.cur_rng_seed)
+        if seed is not None:
+            np.random.seed(seed)
 
         if self.debug_options is not None:
             self._pg_screen = pg.display.set_mode(self.video_size)
