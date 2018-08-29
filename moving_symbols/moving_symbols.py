@@ -47,12 +47,11 @@ Messages start getting published as soon as `env.next()` is first called.
 
 """
 
+import cv2
 import math
 import os
 import sys
-from warnings import warn
 
-import cv2
 import h5py
 import numpy as np
 import pygame as pg
@@ -331,6 +330,8 @@ class MovingSymbolsEnvironment:
       duration of a full scale cycle in number of frames
     - **rotation_speed_limits, (float, float) or list of (float, float)**: The minimum and maximum
       angular speed, in radians per frame
+    - **position_velocity_angle_limits, (float, float) or list of (float, float)**: The minimum and
+      maximum angle of the symbol's initial positional velocity, in radians
     - **position_speed_limits, (float, float) or list of (float, float)**: The minimum and maximum
       translational speed, in pixels per frame
     - **interacting_symbols, bool**: Whether symbols will bounce off each other
@@ -341,12 +342,12 @@ class MovingSymbolsEnvironment:
         but switches directions if the digit gets too big or small)
       - "constant": The symbols do not change scale. Initial scale is randomly sampled from
         within scale_limits
-    - **rotate_at_start, bool**: Whether symbols can start at a rotated angle
-    - **rescale_at_start, bool**: Whether symbols can start at any scale in the specified range. If
-      not. the scale of all symbols is initialized to the middle of the allowed scale range.
-    - **lateral_motion_at_start, bool**: Whether symbols can only translate left/right/up/down to
-      start. If this is True, symbols can only move non-laterally if they bounce off of other
-      symbols.
+    - **start_rotation_limits, (float, float) or list of (float, float)**: The minimum and maximum
+      possible starting angle of the symbol
+    - **start_scale_offset_limits, (float, float) or list of (float, float)**: The minimum and
+      maximum offset for the scale function, in number of frames. For example, (0, 0) will always
+      cause the symbol to grow and then shrink, starting from the middle of the allowed scale range;
+      (p/2, p/2), where p is the scale period, will cause the symbol to shrink and then grow
     - **background_image_loader, FileImageLoader or HDF5ImageLoader**: The image dataset sampler
       from which to sample backgrounds. This must be defined and `background_type` must be
       "image" for backgrounds to be sampled.
@@ -404,15 +405,15 @@ class MovingSymbolsEnvironment:
         video_size=(64, 64),
         output_type='RGB',
         background_type='black',
+        start_scale_offset_limits=(0, 0),
         scale_limits=(1.0, 1.0),
         scale_period_limits=(1, 1),
         rotation_speed_limits=(0, 0),
+        position_velocity_angle_limits=(0, 2*np.pi),
         position_speed_limits=(0, 0),
         interacting_symbols=False,
         scale_function_type='constant',
-        rotate_at_start=False,
-        rescale_at_start=True,
-        lateral_motion_at_start=False,
+        start_rotation_limits=(0, 0),
         symbol_image_loader=None,
         background_image_loader=None
     )
@@ -472,10 +473,16 @@ class MovingSymbolsEnvironment:
         # Convert translation/rotation/scale period/speed limits to lists
         if isinstance(self.params['scale_period_limits'], tuple):
             self.params['scale_period_limits'] = [self.params['scale_period_limits']]
+        if isinstance(self.params['start_scale_offset_limits'], tuple):
+            self.params['start_scale_offset_limits'] = [self.params['start_scale_offset_limits']]
         if isinstance(self.params['rotation_speed_limits'], tuple):
             self.params['rotation_speed_limits'] = [self.params['rotation_speed_limits']]
+        if isinstance(self.params['position_velocity_angle_limits'], tuple):
+            self.params['position_velocity_angle_limits'] = [self.params['position_velocity_angle_limits']]
         if isinstance(self.params['position_speed_limits'], tuple):
             self.params['position_speed_limits'] = [self.params['position_speed_limits']]
+        if isinstance(self.params['start_rotation_limits'], tuple):
+            self.params['start_rotation_limits'] = [self.params['start_rotation_limits']]
 
         if seed is not None:
             np.random.seed(seed)
@@ -503,17 +510,10 @@ class MovingSymbolsEnvironment:
             image, label, image_path = image_loader.get_image()
 
             # Define the scale function
-            period_limits_index = np.random.choice(len(self.params['scale_period_limits']))
-            period = np.random.uniform(
-                *tuple(self.params['scale_period_limits'][period_limits_index])
-            )
+            period = np.random.uniform(*self._choice(self.params['scale_period_limits']))
             amplitude = (self.params['scale_limits'][1] - self.params['scale_limits'][0]) / 2.
-            x_offset = np.random.uniform(period)
-            # Override offset if digits should not start at random scale
-            if not self.params['rescale_at_start']:
-                x_offset = 0
-            # Randomly shift offset (i.e. symbol can either grow or shrink at start)
-            x_offset += (period/2 if np.random.choice([True, False]) else 0)
+            x_offset_range = self._choice(self.params['start_scale_offset_limits'])
+            x_offset = np.random.uniform(*x_offset_range)
             y_offset = (self.params['scale_limits'][1] + self.params['scale_limits'][0]) / 2.
             if self.params['scale_function_type'] == 'sine':
                 scale_fn = create_sine_fn(period, amplitude, x_offset, y_offset)
@@ -530,9 +530,9 @@ class MovingSymbolsEnvironment:
 
             # Set the symbol's initial rotation and scale
             symbol.set_scale(0)
-            start_angle = np.random.uniform(2 * math.pi)
-            if self.params['rotate_at_start']:
-                symbol.body.angle = start_angle
+            sampled_rotation_angle_range = self._choice(self.params['start_rotation_limits'])
+            sampled_rotation_angle = np.random.uniform(*sampled_rotation_angle_range)
+            symbol.body.angle = sampled_rotation_angle
 
             # Compute the minimum possible margin between the symbol's center and the wall
             w_half = image.size[0] / 2.
@@ -547,31 +547,16 @@ class MovingSymbolsEnvironment:
                 symbol.body.position = (np.random.uniform(*x_limits), np.random.uniform(*y_limits))
 
             # Set angular velocity
-            rotation_speed_limit_index = np.random.choice(len(self.params['rotation_speed_limits']))
-            symbol.body.angular_velocity = np.random.uniform(
-                *tuple(self.params['rotation_speed_limits'][rotation_speed_limit_index])
-            )
-            symbol.body.angular_velocity *= 1 if np.random.binomial(1, .5) else -1
+            symbol.body.angular_velocity = np.random.uniform(*self._choice(self.params['rotation_speed_limits']))
             symbol.angular_velocity = symbol.body.angular_velocity
 
             # Set translational velocity
-            sampled_velocity = np.random.uniform(-1, 1, 2)
-            # If only lateral motion is allowed, map velocity to the nearest lateral one
-            if self.params['lateral_motion_at_start']:
-                v_angle = math.degrees(np.arctan2(sampled_velocity[1], sampled_velocity[0]))
-                if v_angle >= -135 and v_angle < -45:
-                    sampled_velocity = np.array([0, -1])
-                elif v_angle >= -45 and v_angle < 45:
-                    sampled_velocity = np.array([1, 0])
-                elif v_angle >= 45 and v_angle < 135:
-                    sampled_velocity = np.array([0, 1])
-                else:
-                    sampled_velocity = np.array([-1, 0])
-            symbol.body.velocity = sampled_velocity / np.linalg.norm(sampled_velocity)
-            position_speed_limit_index = np.random.choice(len(self.params['position_speed_limits']))
-            symbol.body.velocity *= np.random.uniform(
-                *tuple(self.params['position_speed_limits'][position_speed_limit_index])
-            )
+            sampled_direction_angle_range = self._choice(self.params['position_velocity_angle_limits'])
+            sampled_direction_angle = np.random.uniform(*sampled_direction_angle_range)
+            sampled_speed_range = self._choice(self.params['position_speed_limits'])
+            sampled_speed = np.random.uniform(*sampled_speed_range)
+            symbol.body.velocity = (sampled_speed * np.cos(sampled_direction_angle),
+                                    sampled_speed * np.sin(sampled_direction_angle))
 
             # Add symbol to the space and environment
             self._space.add(symbol.body, symbol.shape)
@@ -618,6 +603,14 @@ class MovingSymbolsEnvironment:
                 image_path=image_path
             )
         ))
+
+
+    @staticmethod
+    def _choice(a):
+        """Helper method to randomly choose an element from a list with NumPy. Unlike vanilla np.random.choice(),
+        this method can choose from a list of tuples."""
+        index = np.random.choice(len(a))
+        return a[index]
 
 
     def _add_walls(self):
